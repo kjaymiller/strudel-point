@@ -1,0 +1,624 @@
+/* Same palette as apps/web/src/styles.css and apps/dj/src/styles.css, kept as its own copy
+   since these are independent deployables — not meant to drift, just not worth a shared
+   css package for. */
+:root {
+  color-scheme: dark;
+  --bg: #101014;
+  --panel: #1a1a20;
+  --border: #2a2a33;
+  --text: #e6e6ea;
+  --muted: #8a8a96;
+  --accent: #7ee0c1;
+  font-family: -apple-system, "Inter", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button {
+  background: var(--accent);
+  color: #0b0b0d;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 400;
+}
+
+/* A secondary button standing in for an on/off toggle (currently just the metronome) —
+   same "lit up in the accent color while on" convention as .pad-cut.active. */
+button.secondary.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+  animation: glow-pulse 1s ease-in-out infinite;
+}
+
+/* Shared "something is actively playing" pulse — a slower, gentler cousin of .pad-pulse
+   (a glow rather than a ring, since this is a whole button, not a small square) used
+   wherever a toggle means "this is live right now": the metronome (button.secondary.active
+   above) and recording (.record-button.recording below). */
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 8px 2px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+}
+
+input,
+select {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.pads-app {
+  min-height: 100vh;
+  padding: 16px 20px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.pads-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.pads-header h1 {
+  font-size: 18px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.room-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.room-form label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.connection-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #5a1f1f;
+  flex: 0 0 auto;
+}
+
+.connection-dot.connected {
+  background: var(--accent);
+}
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #3a1414;
+  color: #ffd7d7;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.error-banner span {
+  flex: 1;
+  word-break: break-word;
+}
+
+.loaded-track {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+/* Upload progress, shown once the BeatCutter overlay has already closed (see App.tsx's
+   confirmCut) — a persistent bar instead of a modal blocking the rest of the app while
+   slices upload one by one. */
+.upload-status {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.upload-status--done {
+  border-color: var(--accent);
+}
+
+.upload-status--error {
+  border-color: #ff9b9b;
+}
+
+.upload-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.upload-status--error .upload-status-row span {
+  color: #ff9b9b;
+}
+
+.upload-status-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.upload-status-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 150ms ease-out;
+}
+
+.upload-status--error .upload-status-fill {
+  background: #ff9b9b;
+}
+
+.beat-cutter-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 10;
+}
+
+.beat-cutter {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  width: 100%;
+  max-width: 640px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.track {
+  position: relative;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.dropzone {
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 16px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: 16px;
+}
+
+.dropzone.dragover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pad-section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.pad-section h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.pad-section .hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+.sample-shelf-wrap {
+  margin-bottom: 8px;
+}
+
+.sample-shelf-search {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.sample-shelf {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.sample-shelf-bank {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Same convention apps/web/src/styles.css uses for .bank-header/.bank-collapse-arrow on
+   CustomSamples' own bank groups — kept as its own copy since these are independent
+   deployables (see the note atop this file). */
+.bank-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.bank-collapse-arrow {
+  color: var(--muted);
+  font-size: 10px;
+  width: 10px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.bank-collapse-arrow:hover {
+  color: var(--accent);
+}
+
+/* A <button> (draggable — the whole-bank drag source for PadGrid's bank-loop pads) styled
+   to still read as a plain label, not a button, until you notice it's grabbable.
+   --bank-hue (see SampleShelf.tsx's hueForBank) gives each bank the same stable color its
+   pads use, so a bank reads as one color everywhere it shows up. */
+.sample-shelf-bank-name {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid hsl(var(--bank-hue) 45% 40%);
+  padding: 0 0 1px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  flex-shrink: 0;
+  cursor: grab;
+}
+
+.sample-shelf-bank-name:hover {
+  color: hsl(var(--bank-hue) 70% 65%);
+  border-bottom-color: hsl(var(--bank-hue) 70% 65%);
+}
+
+.sample-shelf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sample-chip {
+  background: var(--bg);
+  border: 1px solid hsl(var(--bank-hue) 35% 35%);
+  color: var(--text);
+  font-weight: 400;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: grab;
+}
+
+.sample-chip:hover {
+  border-color: hsl(var(--bank-hue) 70% 60%);
+  color: hsl(var(--bank-hue) 70% 65%);
+}
+
+.pad-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.pad {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #0b0b0d;
+  cursor: pointer;
+  overflow: hidden;
+  user-select: none;
+}
+
+.pad:hover {
+  border-color: hsl(var(--pad-hue) 70% 60%);
+}
+
+/* --pad-hue is set inline per-pad (see PadGrid.tsx's hueForBank) — every bank gets its own
+   stable color instead of every pad reading as the same plain teal. */
+.pad.filled {
+  border-color: hsl(var(--pad-hue) 45% 40%);
+}
+
+.pad.dragover {
+  border-color: hsl(var(--pad-hue) 70% 60%);
+  box-shadow: inset 0 0 0 2px hsl(var(--pad-hue) 70% 60%);
+}
+
+/* A pad currently sounding — whether from a direct hit or flash()'d in from a playing
+   pattern (see PadGridHandle.flash) — pulses its own bank color outward. Looping rather
+   than a single pulse: a real sample can ring out well past FLASH_DURATION's short blink,
+   so this keeps reading as "still sounding" for as long as `playing` says it is, not just
+   for one fixed animation length. */
+@keyframes pad-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--pad-hue) 90% 60% / 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 6px hsl(var(--pad-hue) 90% 60% / 0);
+  }
+}
+
+.pad.sounding {
+  border-color: hsl(var(--pad-hue) 80% 65%);
+  animation: pad-pulse 0.5s ease-out infinite;
+}
+
+.pad-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.pad-key {
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.pad-name {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  padding: 3px 5px;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pad-clear {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  line-height: 1;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.pad-clear:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.pad-cut {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  z-index: 1;
+  height: 14px;
+  line-height: 1;
+  padding: 0 4px;
+  border: none;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 400;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.pad-cut.active {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.record-section {
+  margin-top: 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.record-section h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.record-section .hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+.record-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.record-controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.record-controls input {
+  width: 64px;
+}
+
+.record-button {
+  background: transparent;
+  color: #ff9b9b;
+  border: 1px solid #ff9b9b;
+  font-weight: 600;
+}
+
+.record-button:hover:not(:disabled) {
+  background: #ff9b9b;
+  color: #0b0b0d;
+}
+
+.record-button.recording {
+  background: #ff9b9b;
+  color: #0b0b0d;
+  animation: record-glow-pulse 1s ease-in-out infinite;
+}
+
+/* Same idea as .glow-pulse above, in the record button's own red rather than the accent
+   teal — a separate keyframes since color-mix(var(--accent)...) wouldn't read as "red". */
+@keyframes record-glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 155, 155, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 8px 2px rgba(255, 155, 155, 0.6);
+  }
+}
+
+.record-hit-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.record-code {
+  width: 100%;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  white-space: pre;
+  margin-bottom: 12px;
+}
+
+.rack-save {
+  margin-top: 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.rack-save h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.rack-save .hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+.save-set {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.save-set input {
+  flex: 1;
+}
+
+.autosave-status {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.autosave-status--saved {
+  color: var(--accent);
+}
+
+.autosave-status--error {
+  color: #ff9b9b;
+}
+
+.share-url {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.share-url input {
+  font-size: 12px;
+  width: 100%;
+}

@@ -1,0 +1,24 @@
+# Fronts all three apps on one origin: everything except /dj* and /pads* goes to the main
+# editor, /dj* goes to the dj mixer, /pads* goes to the pad grid. `handle` (not
+# `handle_path`) so each prefix is preserved on the way through — apps/dj/vite.config.ts
+# and apps/pads/vite.config.ts set `base: "/dj/"` / `base: "/pads/"` (only when BASE_PATH
+# is set, see docker-compose.yml's dj/pads services) precisely so each app's own
+# asset/module requests already carry that prefix and expect it to still be there
+# server-side.
+#
+# /api is deliberately not special-cased here — it falls through to the `web` handle
+# below regardless of which app the browser is currently looking at, and web's own Vite
+# dev-server proxy forwards it to the gateway from there. /ws isn't proxied at all, by
+# any app or Caddy — the browser connects straight to the gateway's own published port
+# (see apps/web/src/ws.ts for why: a proxied WS upgrade hangs forever under Bun).
+:80 {
+	handle /dj* {
+		reverse_proxy dj:5179
+	}
+	handle /pads* {
+		reverse_proxy pads:5185
+	}
+	handle {
+		reverse_proxy web:5173
+	}
+}

@@ -1,0 +1,15 @@
+# Dev-only image — see apps/gateway/Dockerfile.dev for the node_modules-volume rationale.
+FROM oven/bun:1
+
+WORKDIR /app
+
+COPY package.json bun.lock ./
+COPY packages/shared/package.json packages/shared/package.json
+COPY apps/gateway/package.json apps/gateway/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY apps/dj/package.json apps/dj/package.json
+COPY apps/pads/package.json apps/pads/package.json
+RUN bun install
+
+WORKDIR /app/apps/pads
+CMD ["bun", "run", "dev"]

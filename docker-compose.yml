@@ -1,0 +1,225 @@
+name: strudel-point
+
+# Kafka/Postgres/RustFS publish NO host ports — every service reaches them by name
+# (kafka:9092, postgres:5432, rustfs:9000) over Docker's internal DNS, so nothing here
+# competes with whatever's already bound to those ports on your machine. If you want
+# host-side tool access (psql, a Kafka UI, RustFS's own web console if it has one, etc),
+# add your own `ports:` override locally or use `docker compose exec <service> ...`.
+#
+# gateway and web *do* publish host ports, both for things a browser has to reach
+# directly: web's Vite server, and gateway's /ws (see the comment on gateway's `ports:`
+# below for why the browser can't just go through Vite's proxy for that one).
+
+services:
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: strudel-point-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      CLUSTER_ID: strudelpointkraftcluster1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # Object storage for uploaded custom-sample audio (see apps/gateway/src/storage.ts) —
+  # S3-compatible, same as MinIO (which this replaced), just a different server on the
+  # other end of the same "minio" npm client.
+  #
+  # UNVERIFIED — flagging clearly rather than guessing quietly: I don't have a way to
+  # confirm RustFS's exact image name/tag, its root-credential env var names, or a real
+  # health-check command from here. `RUSTFS_ACCESS_KEY`/`RUSTFS_SECRET_KEY` and the `wget`
+  # healthcheck below are best-effort guesses based on how MinIO and similar S3-compatible
+  # servers are typically configured — check them against RustFS's own docs
+  # (https://rustfs.com or https://github.com/rustfs/rustfs) and fix up whatever's wrong
+  # before relying on this; `docker compose up` will make it obvious if the image or env
+  # vars are off.
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: strudel-point-rustfs
+    environment:
+      RUSTFS_ACCESS_KEY: strudel
+      RUSTFS_SECRET_KEY: strudel-dev-secret
+    volumes:
+      - strudel-point-rustfsdata:/data
+    healthcheck:
+      # `wget --spider` alone is too strict here — an unauthenticated GET to an S3-style
+      # server legitimately comes back 403 (it's alive and enforcing auth, not down), and
+      # `--spider` treats any non-2xx as failure. wget's own exit code 4 specifically means
+      # "network failure" (nothing listening); anything else means it got a real HTTP
+      # response, which is what "healthy" actually means here.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9000/; test $? -ne 4"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: strudel-point-postgres
+    environment:
+      POSTGRES_DB: strudel_point
+      POSTGRES_USER: strudel
+      POSTGRES_PASSWORD: strudel
+    volumes:
+      - strudel-point-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U strudel -d strudel_point"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile.dev
+    container_name: strudel-point-gateway
+    # Published so the browser can open its /ws WebSocket directly against the gateway,
+    # bypassing Vite's dev-server proxy: under Bun, Vite's proxy (http-proxy under the
+    # hood) never observes the 'upgrade' event on a proxied 101 response, so a proxied
+    # WS connection sends/receives the join ack but silently never completes the
+    # handshake — no error, no close, it just hangs forever. Plain HTTP proxying (/api)
+    # is unaffected; only the WS upgrade path breaks under Bun's http.request. See
+    # apps/web/src/ws.ts for the client side of this.
+    ports:
+      - "8787:8787"
+    environment:
+      DATABASE_URL: postgres://strudel:strudel@postgres:5432/strudel_point
+      KAFKA_BROKERS: kafka:9092
+      S3_ENDPOINT: rustfs
+      S3_ACCESS_KEY: strudel
+      S3_SECRET_KEY: strudel-dev-secret
+      CORS_ORIGIN: "*" # only Vite's server-side proxy calls the gateway; browser never does
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: strudel-point-gateway
+    volumes:
+      - .:/app
+      - strudel-point-gateway-node-modules:/app/node_modules
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      rustfs: { condition: service_healthy }
+      otel-collector: { condition: service_started }
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.dev
+    container_name: strudel-point-web
+    # A small range, not a single port: Docker itself binds the first free one, so this
+    # doesn't collide with whatever's already using 5173 on your machine. Check
+    # `docker compose port web 5173` (or just `docker compose ps`) to see which it picked.
+    ports:
+      - "5173-5178:5173"
+    volumes:
+      - .:/app
+      - strudel-point-web-node-modules:/app/node_modules
+    depends_on:
+      - gateway
+
+  dj:
+    build:
+      context: .
+      dockerfile: apps/dj/Dockerfile.dev
+    container_name: strudel-point-dj
+    # A separate app from `web` (same idea as its port range) — a DJ deck/crossfader UI
+    # that talks to the same gateway/room. Still reachable directly on whichever port in
+    # this range Docker picks free, but also fronted by `caddy` at /dj on one origin —
+    # BASE_PATH makes this container's own asset/module requests carry that /dj prefix
+    # (see apps/dj/vite.config.ts), so direct access now needs the same /dj/ suffix too.
+    ports:
+      - "5179-5184:5179"
+    environment:
+      BASE_PATH: "/dj/"
+    volumes:
+      - .:/app
+      - strudel-point-dj-node-modules:/app/node_modules
+    depends_on:
+      - gateway
+
+  pads:
+    build:
+      context: .
+      dockerfile: apps/pads/Dockerfile.dev
+    container_name: strudel-point-pads
+    # A separate app again from `web`/`dj` (same idea as their port ranges) — a 16-pad
+    # sampler UI that talks to the same gateway/room. Still reachable directly on
+    # whichever port in this range Docker picks free, but also fronted by `caddy` at
+    # /pads on one origin — BASE_PATH makes this container's own asset/module requests
+    # carry that /pads prefix (see apps/pads/vite.config.ts), so direct access now needs
+    # the same /pads/ suffix too.
+    ports:
+      - "5185-5190:5185"
+    environment:
+      BASE_PATH: "/pads/"
+    volumes:
+      - .:/app
+      - strudel-point-pads-node-modules:/app/node_modules
+    depends_on:
+      - gateway
+
+  # All-in-one Jaeger: UI + native OTLP receiver + in-memory storage. In-memory means
+  # traces don't survive `docker compose down` — fine for local dev, swap the storage
+  # backend (Cassandra/Elasticsearch/etc via env) if you need durable traces.
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    container_name: strudel-point-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    # A small range, not a single port (same idea as web/dj/pads below): Docker binds
+    # whichever's actually free, so this doesn't collide with another project's own
+    # Jaeger/otel stack already sitting on the common default ports. Run
+    # `docker compose port jaeger 16686` (or `docker compose ps`) to see which it picked.
+    ports:
+      - "16686-16690:16686" # Jaeger UI
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:16686/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Single fixed OTLP endpoint every instrumented service points at (see
+  # otel/otel-collector-config.yaml) — traces are batched here and forwarded to Jaeger.
+  # No host ports published, same reasoning as kafka/postgres/rustfs above: only the
+  # gateway talks to this, over Docker-internal DNS (otel-collector:4317/4318), so
+  # there's nothing here for a host port to collide with.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    container_name: strudel-point-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    depends_on:
+      jaeger: { condition: service_healthy }
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: strudel-point-caddy
+    # The one-stop-shop origin: "/" -> web, "/dj" -> dj, "/pads" -> pads (see
+    # ./Caddyfile). No app's own published port goes away — this just adds one more way
+    # in that doesn't require remembering which port got picked for which app.
+    ports:
+      - "8088:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - web
+      - dj
+      - pads
+
+volumes:
+  strudel-point-pgdata:
+  strudel-point-rustfsdata:
+  strudel-point-gateway-node-modules:
+  strudel-point-web-node-modules:
+  strudel-point-dj-node-modules:
+  strudel-point-pads-node-modules:

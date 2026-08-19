@@ -1,0 +1,22 @@
+{
+  "name": "strudel-point",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "bun run --filter @strudel-point/gateway build && bun run --filter @strudel-point/web build && bun run --filter @strudel-point/dj build && bun run --filter @strudel-point/pads build",
+    "migrate": "bun scripts/migrate.mjs"
+  },
+  "devDependencies": {
+    "pg": "^8.13.1"
+  },
+  "overrides": {
+    "@strudel/core": "1.2.6",
+    "@strudel/draw": "1.2.6",
+    "@strudel/tonal": "1.2.6",
+    "@strudel/transpiler": "1.2.6"
+  }
+}

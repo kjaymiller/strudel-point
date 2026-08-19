@@ -1,0 +1,34 @@
+# Collector sits between apps and Jaeger so any service can point at one fixed
+# OTLP endpoint (otel-collector:4317/4318) regardless of what's actually consuming
+# traces downstream — swapping/adding an exporter (a SaaS backend, Prometheus for
+# metrics, etc.) later is a change here, not a change in every instrumented app.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Groups spans into fewer, larger export requests instead of one per span.
+  batch: {}
+
+exporters:
+  # Jaeger has spoken native OTLP (grpc :4317 / http :4318) since 1.35, so the
+  # collector can hand spans straight to it with no jaeger-specific exporter.
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  # Prints received spans to the collector's own stdout — handy for `docker compose
+  # logs otel-collector` when you just want to confirm traces are arriving at all.
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger, debug]

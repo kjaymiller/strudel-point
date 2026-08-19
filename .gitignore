@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+*.tsbuildinfo
+
+# Claude Code local/session state — not shared project config
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

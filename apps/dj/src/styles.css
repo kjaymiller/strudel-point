@@ -1,0 +1,476 @@
+/* Same palette as apps/web/src/styles.css, kept as its own copy since these are
+   independent deployables — not meant to drift, just not worth a shared css package for. */
+:root {
+  color-scheme: dark;
+  --bg: #101014;
+  --panel: #1a1a20;
+  --border: #2a2a33;
+  --text: #e6e6ea;
+  --muted: #8a8a96;
+  --accent: #7ee0c1;
+  font-family: -apple-system, "Inter", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button {
+  background: var(--accent);
+  color: #0b0b0d;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 400;
+}
+
+.deck-transport {
+  display: flex;
+  gap: 8px;
+}
+
+.deck-transport button {
+  flex: 1;
+}
+
+/* Hard-cut — deliberately styled apart from the regular play/stop toggle it sits next to,
+   since it does something more drastic (see Deck.tsx's onCut doc comment). */
+.deck-cut {
+  background: transparent;
+  color: #ff9b9b;
+  border: 1px solid #ff9b9b;
+  font-weight: 600;
+}
+
+.deck-cut:hover:not(:disabled) {
+  background: #ff9b9b;
+  color: #0b0b0d;
+}
+
+input,
+select {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.dj-app {
+  min-height: 100vh;
+  padding: 16px 20px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.dj-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.dj-header h1 {
+  font-size: 18px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.room-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.room-form label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.connection-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #5a1f1f;
+  flex: 0 0 auto;
+}
+
+.connection-dot.connected {
+  background: var(--accent);
+}
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #3a1414;
+  color: #ffd7d7;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.error-banner span {
+  flex: 1;
+  word-break: break-word;
+}
+
+.loaded-track {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.decks {
+  display: grid;
+  grid-template-columns: 1fr 160px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.deck {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.deck--master {
+  border-color: var(--accent);
+}
+
+.deck-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.deck-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.deck-bpm {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.deck-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.deck-row input[type="range"] {
+  flex: 1;
+}
+
+.deck-row--vertical {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.deck-fx-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.fx-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.fx-cell-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.fx-cell .deck-value {
+  width: auto;
+  text-align: center;
+}
+
+/* Same height as .fx-toggle, so a depth knob (no toggle of its own) still lines up in
+   the grid with its rate knob's toggle sitting above it in the row before. */
+.fx-toggle-spacer,
+.fx-cell-blank {
+  height: 16px;
+}
+
+.fx-toggle {
+  height: 16px;
+  line-height: 1;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 400;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.fx-toggle.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.fx-toggle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.knob {
+  position: relative;
+  border-radius: 50%;
+  background: #0b0b0d;
+  border: 1px solid var(--border);
+  cursor: ns-resize;
+  flex-shrink: 0;
+  touch-action: none;
+}
+
+.knob--disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.knob-dial {
+  position: absolute;
+  inset: 0;
+}
+
+.knob-indicator {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 2px;
+  height: 40%;
+  background: var(--accent);
+  transform: translateX(-50%);
+  border-radius: 1px;
+}
+
+.knob--disabled .knob-indicator {
+  background: var(--muted);
+}
+
+.deck-value {
+  font-size: 12px;
+  color: var(--text);
+  width: 42px;
+  text-align: right;
+}
+
+.crossfader-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-self: stretch;
+  justify-content: center;
+}
+
+.master-bpm {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  margin: 0;
+}
+
+.code-section {
+  margin-top: 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.code-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.code-section-header h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.code-section .hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 10px 0 12px;
+}
+
+.code-section .hint code {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.code-editor {
+  width: 100%;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  white-space: pre;
+}
+
+.set-builder {
+  margin-top: 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.set-builder h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.set-builder .hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+.scene-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.scene-controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.scene-controls input {
+  width: 60px;
+}
+
+.scene-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scene-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  background: #0b0b0d;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.save-set {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.save-set input {
+  flex: 1;
+}
+
+.autosave-status {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.autosave-status--saved {
+  color: var(--accent);
+}
+
+.autosave-status--error {
+  color: #ff9b9b;
+}
+
+.share-url {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.share-url input {
+  font-size: 12px;
+  width: 100%;
+}
+
+@media (max-width: 860px) {
+  .decks {
+    grid-template-columns: 1fr;
+  }
+}

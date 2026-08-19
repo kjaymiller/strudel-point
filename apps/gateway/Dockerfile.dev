@@ -1,0 +1,17 @@
+# Dev-only image: installs deps at build time (so the node_modules volume in
+# docker-compose.yml gets seeded on first run — Docker copies an image directory's
+# contents into a brand-new named volume mounted over it), then relies on the
+# docker-compose bind mount for live source. Not meant for production.
+FROM oven/bun:1
+
+WORKDIR /app
+
+# Copy just the manifests needed to resolve the workspace graph, so `bun install` is
+# cached unless a package.json/lockfile actually changes.
+COPY package.json bun.lock ./
+COPY packages/shared/package.json packages/shared/package.json
+COPY apps/gateway/package.json apps/gateway/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN bun install
+
+CMD ["bun", "--watch", "apps/gateway/src/index.ts"]
