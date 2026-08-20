@@ -12,6 +12,7 @@ import type {
   AutosaveDoc,
   ChannelEvent,
   CustomSample,
+  Presence,
   StrudelJson,
   Track,
 } from "@strudel-point/shared";
@@ -277,11 +278,32 @@ export default function App() {
     [reportError, reportWarning, attachHighlighting, syncSliderWidgets],
   );
 
+  // Seeds the peer list from the gateway's roster (Valkey-backed, so it spans every
+  // gateway instance) the moment our join is acked. The user:joined/user:left stream alone
+  // only ever describes changes *after* we connected, so without this, walking into a busy
+  // room reads "0 peers" until someone else happens to join or leave. Runs on reconnects
+  // too — each join gets a fresh userId, and a reconnect is exactly when the event-only
+  // view is most stale.
+  const handleJoined = useCallback(
+    (selfUserId: string) => {
+      fetch(`/api/channels/${channelId}/presence`)
+        .then(jsonOrThrow)
+        .then((presence: Presence) => {
+          setPeerIds(
+            new Set(presence.peers.map((p) => p.userId).filter((id) => id !== selfUserId)),
+          );
+        })
+        .catch((err) => reportError(`couldn't load the room roster: ${err.message}`));
+    },
+    [channelId, reportError],
+  );
+
   const { connected, send } = useChannelSocket({
     channelId,
     username,
     onEvent: handleEvent,
     onError: reportError,
+    onJoined: handleJoined,
   });
 
   // Load saved tracks, this channel's custom samples, and the last autosaved buffer.

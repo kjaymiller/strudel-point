@@ -67,3 +67,35 @@ export const kafkaErrorsTotal = new Counter({
   labelNames: ["operation"] as const,
   registers: [registry],
 });
+
+export const valkeyCommandsTotal = new Counter({
+  name: "gateway_valkey_commands_total",
+  help: "Total Valkey commands that succeeded, by logical operation",
+  labelNames: ["operation"] as const,
+  registers: [registry],
+});
+
+// Every increment here is a request that silently took the degraded path (in-memory
+// presence, or a write-through to Postgres) rather than failing — see withValkey in
+// valkey.ts. A nonzero rate is the only outward sign of that, which is why it's a metric
+// and not just a log line.
+export const valkeyErrorsTotal = new Counter({
+  name: "gateway_valkey_errors_total",
+  help: "Total Valkey command failures that fell back, by logical operation",
+  labelNames: ["operation"] as const,
+  registers: [registry],
+});
+
+export const autosaveFlushesTotal = new Counter({
+  name: "gateway_autosave_flushes_total",
+  help: "Total buffered autosaves persisted from Valkey to Postgres",
+  registers: [registry],
+});
+
+// Distinct from valkeyErrorsTotal: this is the *Postgres* half of the flush failing, which
+// means a buffered edit got requeued and is still only in Valkey.
+export const autosaveFlushErrorsTotal = new Counter({
+  name: "gateway_autosave_flush_errors_total",
+  help: "Total buffered autosaves that failed to persist and were requeued",
+  registers: [registry],
+});

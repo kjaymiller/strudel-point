@@ -1,0 +1,9 @@
+# bun 1.3 made the "isolated" linker the default for workspaces, which puts each
+# workspace's dependencies in its OWN node_modules (apps/gateway/node_modules/...) rather
+# than hoisting them to the root. docker-compose.yml's per-service node_modules volumes all
+# mount at /app/node_modules, and the repo bind mount (.:/app) shadows every nested
+# node_modules with the host's macOS-ARM copy — the exact thing those volumes exist to
+# avoid. Pin the hoisted layout so the container's node_modules volume is the one that
+# actually gets used.
+[install]
+linker = "hoisted"

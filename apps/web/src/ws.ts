@@ -10,10 +10,16 @@ interface UseChannelSocketOpts {
   username: string;
   onEvent: (event: ChannelEvent) => void;
   onError: (message: string) => void;
+  /**
+   * Fired with our own userId once the gateway acks the join — the earliest point at which
+   * we can fetch the room roster and know which entry in it is us. Fires again on every
+   * reconnect, since each join is issued a fresh userId.
+   */
+  onJoined?: (selfUserId: string) => void;
 }
 
 /** Connects to the gateway's /ws endpoint and joins a channel. Reconnects with backoff on drop. */
-export function useChannelSocket({ channelId, username, onEvent, onError }: UseChannelSocketOpts) {
+export function useChannelSocket({ channelId, username, onEvent, onError, onJoined }: UseChannelSocketOpts) {
   const wsRef = useRef<WebSocket | null>(null);
   const selfUserId = useRef<string | null>(null);
   const [connected, setConnected] = useState(false);
@@ -21,6 +27,8 @@ export function useChannelSocket({ channelId, username, onEvent, onError }: UseC
   onEventRef.current = onEvent;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  const onJoinedRef = useRef(onJoined);
+  onJoinedRef.current = onJoined;
 
   useEffect(() => {
     let stopped = false;
@@ -55,6 +63,7 @@ export function useChannelSocket({ channelId, username, onEvent, onError }: UseC
         }
         if (msg.type === "joined") {
           selfUserId.current = msg.userId;
+          onJoinedRef.current?.(msg.userId);
           return;
         }
         if (msg.type === "error") {

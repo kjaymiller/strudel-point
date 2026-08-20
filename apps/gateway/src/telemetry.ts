@@ -10,14 +10,14 @@
 //
 // VERIFIED against a live run, not assumed: auto-instrumentation here only actually
 // produces spans for Node's own core modules (http, net) — confirmed by inspecting real
-// traces in Jaeger. `pg`, `kafkajs`, and `minio` (the S3 client rustfs traffic rides on)
-// are all userland packages this app reaches via ESM `import`, and each ships an
+// traces in Jaeger. `pg`, `kafkajs`, `minio` (the S3 client rustfs traffic rides on), and
+// `iovalkey` are all userland packages this app reaches via ESM `import`, and each ships an
 // instrumentation that patches its target by hooking require()/import() at module-load
 // time (require-in-the-middle / import-in-the-middle). Under Bun that hook does not fire
 // for these — http/net still get traced because those instrumentations patch the core
 // module object directly rather than relying on the load hook. Rather than depend on
-// that hook working, db.ts/kafka.ts/storage.ts each wrap their own calls in a manual span
-// using the `tracer` exported below — see the comments there.
+// that hook working, db.ts/kafka.ts/storage.ts/valkey.ts each wrap their own calls in a
+// manual span using the `tracer` exported below — see the comments there.
 import { trace } from "@opentelemetry/api";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
@@ -25,7 +25,7 @@ import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { Resource } from "@opentelemetry/resources";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 
-// Shared tracer for the manual spans in db.ts/kafka.ts/storage.ts (see the comment
+// Shared tracer for the manual spans in db.ts/kafka.ts/storage.ts/valkey.ts (see the comment
 // block below on why those need manual spans instead of auto-instrumentation).
 // trace.getTracer() is safe to call even when the SDK below never starts (no
 // OTEL_EXPORTER_OTLP_ENDPOINT) — the API package always has a working no-op tracer

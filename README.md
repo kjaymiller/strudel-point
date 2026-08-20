@@ -1,8 +1,9 @@
 # strudel-point
 
 A [flok.cc](https://flok.cc)-style collaborative live-coding room for [Strudel](https://strudel.cc),
-with Kafka as the event backbone between clients, Postgres for saved tracks/metadata, and
-RustFS (S3-compatible object storage) for user-uploaded audio.
+with Kafka as the event backbone between clients, Postgres for saved tracks/metadata, RustFS
+(S3-compatible object storage) for user-uploaded audio, and Valkey for cross-instance presence
+and autosave buffering.
 
 ## Architecture
 
@@ -20,6 +21,7 @@ flowchart LR
     kafka[("Kafka\nstrudel.channel.events")]
     pg[("Postgres\ntracks, custom_samples")]
     rustfs[("RustFS\nsample audio, 24h TTL")]
+    valkey[("Valkey\npresence, autosave buffer")]
 
     browser -- "/ , /dj , /pads" --> edge
     browser -- "WS /ws (direct, not proxied)" --> gw
@@ -31,6 +33,7 @@ flowchart LR
     gw -- "produce/consume,\nkeyed by channelId" --> kafka
     gw -- "tracks + sample metadata" --> pg
     gw -- "upload/fetch sample bytes" --> rustfs
+    gw -- "roster + buffered autosaves\n(optional: degrades if down)" --> valkey
 
     style edge fill:none,stroke-dasharray: 4 4
 ```
@@ -56,7 +59,7 @@ sequenceDiagram
 The gateway never fans an event out on receipt — it only ever broadcasts what it *consumes back* off Kafka, including to the sender. That keeps behavior identical whether one gateway instance is running or ten, and gives a durable, replayable log for free.
 
 Everything except the web container's own port is **internal to the Docker network** —
-gateway talks to `kafka:9092`/`postgres:5432`/`rustfs:9000` by Docker's internal DNS, and the
+gateway talks to `kafka:9092`/`postgres:5432`/`rustfs:9000`/`valkey:6379` by Docker's internal DNS, and the
 browser never talks to the gateway directly; Vite's own server-side proxy does that from
 inside the web container. The only host port that has to exist is the one the browser hits.
 
@@ -71,10 +74,65 @@ inside the web container. The only host port that has to exist is the one the br
 - **Audio happens per-browser.** Like flok.cc, nobody's audio is server-rendered — every
   client runs its own `@strudel/web` instance and locally evaluates whatever `eval` events
   come through, so everyone in the room hears the pattern.
-- **Presence is best-effort.** There's no room roster fetched on join, so a client only learns
-  about peers who join/leave *after* it connects. Fine for the MVP; add a small `GET
-  /api/channels/:id/presence` (backed by an in-memory or Redis set) if you need an accurate
-  peer list for people already in the room.
+- **Presence is a Valkey sorted set, not the event stream.** `GET
+  /api/channels/:id/presence` returns the full roster across every gateway instance, so a
+  client joining a busy room sees who's already there rather than only learning about
+  arrivals after it connected. See the Valkey section below.
+
+## Valkey: presence and the autosave buffer
+
+Valkey used to *hold* custom sample audio — the only copy, which is why it had a 5MB cap and
+why losing it lost data. `storage.ts` owns those bytes now. It's back in a narrower role, and
+the rule that keeps it honest is that **nothing in it is a system of record**: everything here
+is either re-derived (presence) or has a durable copy elsewhere (autosaves → Postgres).
+
+```mermaid
+flowchart LR
+    ws["WS join /\n30s heartbeat"] -- "ZADD presence:{ch}:peers" --> vk[("Valkey")]
+    put["PUT /api/…/autosave"] -- "SET + SADD dirty" --> vk
+    vk -- "ZREVRANGE" --> get["GET /api/…/presence"]
+    vk -- "SPOP dirty → UPSERT\nevery 15s" --> pg[("Postgres")]
+```
+
+**Presence** (`apps/gateway/src/presence.ts`). This is the one thing the Kafka fan-out design
+can't give you: every instance runs its own consumer group and broadcasts to its own sockets,
+which is exactly why no instance knows who's connected to any other. `rooms.ts` is a plain
+in-process `Map`, so `peerCount` used to mean "peers on whichever instance you happened to
+ask" — and a client's peer list was join-order-only, missing everyone already in the room.
+A sorted set per channel, scored by last-seen timestamp, fixes both: the score doubles as the
+liveness reaper for sockets that died without a clean close (reaped on read, so there's no
+per-channel background sweep). The ws heartbeat in `index.ts` refreshes the score on the same
+30s tick it pings on, and a peer drops off the roster after three consecutive misses.
+
+**Autosave buffering** (`apps/gateway/src/autosaveBuffer.ts`). The web client debounces
+autosave to 3s and also fires one on every evaluate, so a room with someone actively typing
+was doing an UPSERT into `autosaves` every few seconds, forever, for a row nobody reads until
+a reload. Writes now land in Valkey and mark the channel dirty; a flusher drains the dirty set
+into Postgres every 15s (and once more on shutdown). Postgres is still the durable copy — this
+changed *when* it's written, not whether.
+
+The honest trade: losing Valkey between flushes loses up to 15s of autosave. That's acceptable
+*here specifically* because autosave is already the explicitly lossy tier — a debounced
+best-effort snapshot, deliberately distinct from a saved `Track`, which still writes straight
+to Postgres synchronously. It would not be acceptable for tracks, and the pattern shouldn't be
+copied there.
+
+The flusher is safe to run on every instance concurrently: `SPOP` *claims* channels atomically,
+so two instances can't flush the same one, and a write landing after the pop simply re-adds the
+channel for the next tick (rather than being lost, which is what read-then-`SREM` would do).
+
+**It's optional, and that's enforced in code, not just documented.** The client runs with
+`enableOfflineQueue: false`, so when Valkey is down commands fail on the first attempt instead
+of buffering and firing late — every call goes through one `withValkey()` helper that falls
+back to the lesser thing: presence degrades to per-instance (the old behavior), autosave writes
+straight through to Postgres. `docker-compose.yml` depends on it with `service_started`, not
+`service_healthy`, for the same reason. Watch
+`gateway_valkey_errors_total` in Prometheus — that counter is the only outward sign a request
+took the degraded path. Verified both directions: with Valkey down the gateway starts and
+serves normally, and it reconnects on its own once Valkey comes back.
+
+The compose service has no volume, deliberately, and runs `--maxmemory-policy allkeys-lru`:
+eviction here is a cache miss, not data loss.
 
 ## `tracks` table
 
@@ -172,12 +230,12 @@ audio at all anymore, only the Tracks this (or the main) app already saved.
 
 ## Running locally
 
-Everything runs as Docker containers — Kafka, Postgres, RustFS, the gateway, and the web dev
-server. `mise trust` once if this is the first time mise has seen this directory, then:
+Everything runs as Docker containers — Kafka, Postgres, RustFS, Valkey, the gateway, and the
+web dev server. `mise trust` once if this is the first time mise has seen this directory, then:
 
 ```sh
 mise install       # installs bun at the pinned version (used for one-off scripts + host tooling)
-mise run docker:up # builds + starts everything (Kafka, Postgres, RustFS, gateway, web)
+mise run docker:up # builds + starts everything (Kafka, Postgres, RustFS, Valkey, gateway, web)
 mise run migrate   # applies db/migrations/*.sql, run from inside the gateway container
 mise run dev       # follows gateway + web logs (docker:up already started them)
 ```
@@ -188,7 +246,7 @@ their own copy of `node_modules` at build time (deliberately: this is a monorepo
 ARM but the containers are Linux, and something like Vite's `esbuild` ships platform-specific
 native binaries — sharing a host-installed `node_modules` into the container would just break).
 
-Kafka/Postgres/RustFS publish **no host ports at all** — nothing to collide with, since the
+Kafka/Postgres/RustFS/Valkey publish **no host ports at all** — nothing to collide with, since the
 gateway reaches them by Docker-internal DNS name instead of `localhost:<port>`. The one port
 that does need to reach your browser (Vite's dev server) is published as a small range —
 `5173-5178:5173` — so Docker itself binds whichever's actually free; run `docker compose port
@@ -214,20 +272,22 @@ flowchart LR
 ```
 
 Traces cover incoming HTTP requests (`/api/*`), WebSocket handling, and every one of this
-app's three database calls — Postgres queries, Kafka produce/consume, and RustFS/S3
-object calls — enough to see, e.g., a `save` request's full path from `/api/tracks` down
-through the `pg` query it issued, or a sample upload down through its `s3.putObject`.
+app's four backing-service calls — Postgres queries, Kafka produce/consume, RustFS/S3
+object calls, and Valkey commands — enough to see, e.g., a `save` request's full path from
+`/api/tracks` down through the `pg` query it issued, or a sample upload down through its
+`s3.putObject`.
 
-**Why Postgres/Kafka/S3 use manual spans instead of auto-instrumentation:** the standard
+**Why Postgres/Kafka/S3/Valkey use manual spans instead of auto-instrumentation:** the standard
 approach (`getNodeAutoInstrumentations()` in `telemetry.ts`) covers `pg`, `kafkajs`, and
 friends out of the box — but only via a require/import hook that patches each package the
 moment it's loaded, and confirmed against a live run, that hook doesn't fire under Bun for
 packages this app reaches through ESM `import` (only Node's own core `http`/`net` modules
 still get patched, since those are patched directly rather than via the hook). Rather than
 depend on that, `db.ts` (wraps `pool.query` once, so every route gets it for free),
-`kafka.ts` (`publishChannelEvent` / the consumer's `eachMessage`), and `storage.ts` (every
-`putObject`/`getObject`/`statObject`/`removeObject` call) each start their own span by hand,
-using the `tracer` `telemetry.ts` exports. Revisit this if a future OTel/Bun release closes
+`kafka.ts` (`publishChannelEvent` / the consumer's `eachMessage`), `storage.ts` (every
+`putObject`/`getObject`/`statObject`/`removeObject` call), and `valkey.ts` (the one
+`withValkey` helper every presence/autosave call goes through) each start their own span by
+hand, using the `tracer` `telemetry.ts` exports. Revisit this if a future OTel/Bun release closes
 that hook gap — the manual spans could then be dropped in favor of the bundled ones.
 
 - `otel-collector` publishes no host port, same reasoning as kafka/postgres/rustfs — only
@@ -252,6 +312,9 @@ Copy `apps/gateway/.env.example` to `apps/gateway/.env` and fill in:
 - `KAFKA_BROKERS`, `KAFKA_SSL=true`, `KAFKA_SASL_USERNAME`, `KAFKA_SASL_PASSWORD` — from an
   Aiven for Apache Kafka service.
 - `DATABASE_URL` — from an Aiven for PostgreSQL service (`sslmode=require`).
+- `VALKEY_URL` — from an Aiven for Valkey service. Paste the service URI as-is; the
+  `valkeys://` (or `rediss://`) scheme turns TLS on by itself. Optional, like everywhere else
+  Valkey shows up here — leave it pointing at nothing and the gateway just runs degraded.
 - `S3_ENDPOINT`, `S3_PORT`, `S3_USE_SSL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` — from wherever you're
   actually running/using S3-compatible object storage. **There's no Aiven-managed equivalent for
   this one** — it'd mean either self-hosting RustFS somewhere real (a VM, a container platform) or
@@ -259,9 +322,9 @@ Copy `apps/gateway/.env.example` to `apps/gateway/.env` and fill in:
   RustFS container is dev-only.
 
 I haven't provisioned any of these yet — say the word and I'll set up the OpenTofu for a
-dev-tier Kafka + PostgreSQL in project `jay-miller` / `do-nyc`, per your usual setup, plus we'd
-need to separately decide where the object storage half actually lives, since that one's not
-something Aiven's OpenTofu provider can stand up,
+dev-tier Kafka + PostgreSQL + Valkey in project `jay-miller` / `do-nyc`, per your usual setup,
+plus we'd need to separately decide where the object storage half actually lives, since that
+one's not something Aiven's OpenTofu provider can stand up,
 and confirm the exact specs with you before creating anything.
 
 ## What's not here yet

@@ -8,6 +8,9 @@ import type { ChannelEvent, ClientMessage } from "@strudel-point/shared";
 import { env } from "./env.js";
 import { connectKafka, disconnectKafka, publishChannelEvent, runConsumer } from "./kafka.js";
 import { connectStorage, disconnectStorage } from "./storage.js";
+import { connectValkey, disconnectValkey } from "./valkey.js";
+import { dropPeer, touchPeer } from "./presence.js";
+import { startAutosaveFlusher, stopAutosaveFlusher } from "./autosaveBuffer.js";
 import { broadcastToChannel, findClient, joinRoom, leaveRoom, type Client } from "./rooms.js";
 import { pool } from "./db.js";
 import { tracksRouter } from "./routes/tracks.js";
@@ -74,6 +77,9 @@ const socketChannel = new Map<WebSocket, string>();
 // that didn't pong since the last check, so a truly dead socket gets cleaned up (and the
 // client's own reconnect logic gets a fresh, working connection) within one interval
 // instead of an indeterminate wait.
+// The same tick also refreshes each live socket's entry in the Valkey presence roster
+// (see presence.ts) — this is the "positive evidence the socket is alive" signal that
+// roster's reaper scores against, so the two intervals are deliberately one interval.
 const alive = new WeakSet<WebSocket>();
 const heartbeat = setInterval(() => {
   for (const ws of wss.clients) {
@@ -83,6 +89,16 @@ const heartbeat = setInterval(() => {
     }
     alive.delete(ws);
     ws.ping();
+
+    const channelId = socketChannel.get(ws);
+    const client = channelId ? findClient(channelId, ws) : undefined;
+    if (channelId && client) {
+      // Fire-and-log: a presence refresh failing is a degraded roster, not a reason to
+      // skip pinging the rest of the sockets in this loop.
+      touchPeer(channelId, client.userId, client.username).catch((err) =>
+        console.error("failed to refresh presence", err),
+      );
+    }
   }
 }, 30_000);
 
@@ -124,6 +140,11 @@ wss.on("connection", (ws) => {
       const client: Client = { ws, userId: randomUUID(), username: msg.username };
       joinRoom(channelId, client);
       socketChannel.set(ws, channelId);
+
+      // Awaited, unlike the channels-directory upsert below: the client fetches
+      // GET /api/channels/:id/presence right after it sees the `joined` ack, and a roster
+      // that doesn't yet contain the joiner reads as a bug ("where am I?").
+      await touchPeer(channelId, client.userId, client.username);
 
       // Records the room in the directory (GET /api/channels) the moment anyone joins it,
       // independent of whether it ever gets a saved track/autosave/sample. Fire-and-log
@@ -178,6 +199,7 @@ wss.on("connection", (ws) => {
     socketChannel.delete(ws);
     if (!client) return;
     leaveRoom(channelId, client);
+    dropPeer(channelId, client.userId).catch((err) => console.error("failed to drop presence", err));
     publishChannelEvent({
       type: "user:left",
       channelId,
@@ -191,6 +213,10 @@ wss.on("connection", (ws) => {
 async function main() {
   await connectKafka();
   await connectStorage();
+  // Deliberately not fatal if this fails (connectValkey never throws) — presence falls
+  // back to per-instance, autosave falls back to write-through Postgres. See valkey.ts.
+  await connectValkey();
+  startAutosaveFlusher();
 
   // Fan out every consumed event to whichever clients this instance is holding sockets for.
   // Note: the sender itself will also receive its own event echoed back (simplest correct
@@ -215,7 +241,11 @@ process.on("SIGTERM", shutdown);
 async function shutdown() {
   console.log("shutting down...");
   clearInterval(heartbeat);
+  // Before disconnectValkey: this drains whatever autosaves are still buffered into
+  // Postgres, and it needs the connection to do it.
+  await stopAutosaveFlusher();
   await disconnectKafka();
   await disconnectStorage();
+  await disconnectValkey();
   httpServer.close(() => process.exit(0));
 }

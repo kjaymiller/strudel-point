@@ -1,4 +1,5 @@
 import { WebSocket } from "ws";
+import type { PresencePeer } from "@strudel-point/shared";
 import { wsMessagesSentTotal } from "./metrics.js";
 
 interface Client {
@@ -49,11 +50,31 @@ export function broadcastToChannel(channelId: string, payload: unknown, exclude?
   }
 }
 
-/** Peer counts for every room with at least one client on *this* gateway instance. */
+/**
+ * Peer counts for every room with at least one client on *this* gateway instance.
+ * Only used as presence.ts's fallback now — the accurate cross-instance count lives in
+ * Valkey; this is what you get when Valkey is unreachable.
+ */
 export function listRoomCounts(): Map<string, number> {
   const counts = new Map<string, number>();
   for (const [channelId, room] of rooms) counts.set(channelId, room.size);
   return counts;
+}
+
+/**
+ * This instance's own clients in a channel, shaped like the Valkey-backed roster so
+ * presence.ts can fall back to it without the caller noticing a different type.
+ * `lastSeenAt` is "now" because a socket held in this map is by definition still open.
+ */
+export function listRoomPeers(channelId: string): PresencePeer[] {
+  const room = rooms.get(channelId);
+  if (!room) return [];
+  const now = new Date().toISOString();
+  return [...room].map((client) => ({
+    userId: client.userId,
+    username: client.username,
+    lastSeenAt: now,
+  }));
 }
 
 export type { Client };

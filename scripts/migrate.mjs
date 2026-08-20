@@ -15,9 +15,7 @@ const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://strudel:strudel@pos
 const migrationsDir = path.resolve(import.meta.dirname, "..", "db", "migrations");
 
 async function main() {
-  const files = (await readdir(migrationsDir))
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
+  const files = (await readdir(migrationsDir)).filter((f) => f.endsWith(".sql")).sort();
 
   const client = new pg.Client({ connectionString: DATABASE_URL });
   await client.connect();

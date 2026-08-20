@@ -40,6 +40,14 @@ export const env = {
   // has no equivalent hook for.
   sampleTtlDays: Number(process.env.SAMPLE_TTL_DAYS ?? 1),
 
+  // Cross-instance presence + the autosave write buffer (see valkey.ts, presence.ts,
+  // autosaveBuffer.ts). Neither is a system of record, so an unreachable Valkey degrades
+  // those two features rather than failing requests — which is why there's no "disabled"
+  // flag here: not having it running is already a supported state. iovalkey accepts
+  // valkey:// and redis:// alike, and turns on TLS for the valkeys://rediss:// variants,
+  // so an Aiven for Valkey URI drops straight in.
+  valkeyUrl: process.env.VALKEY_URL ?? "valkey://valkey:6379",
+
   // Stem separation (see routes/stems.ts) — the dedicated Spleeter service, local
   // docker-compose by default. Internal-only: nothing outside this gateway ever needs to
   // reach it directly, so unlike S3_* above there's no "point this at a managed provider
