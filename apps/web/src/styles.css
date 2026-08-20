@@ -309,6 +309,77 @@ body {
   color: var(--accent);
 }
 
+/* @strudel-point/library's <SampleEditor> — same classes every other strudel-point app
+   styles (see e.g. apps/patch-panel/src/styles.css), ported here so web's copy renders
+   identically now that it uses the shared component instead of its own BeatAnalyzer. */
+.knob-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.sample-editor-error {
+  color: #ff9b9b;
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+
+.sample-editor-hint {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 8px 0 0;
+}
+
+.sample-editor-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.sample-editor-waveform {
+  position: relative;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.sample-editor-cut-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  cursor: ew-resize;
+}
+
+.sample-editor-cycles-row,
+.sample-editor-resample-row,
+.sample-editor-stems-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.sample-editor-slices {
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.sample-editor-slice {
+  font-size: 12px;
+}
+
+.sample-editor-done {
+  color: var(--accent);
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+
 .custom-sample {
   position: relative;
 }

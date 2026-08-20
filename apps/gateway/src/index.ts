@@ -13,22 +13,50 @@ import { pool } from "./db.js";
 import { tracksRouter } from "./routes/tracks.js";
 import { autosaveRouter } from "./routes/autosave.js";
 import { samplesRouter } from "./routes/samples.js";
+import { stemsRouter } from "./routes/stems.js";
 import { channelsRouter } from "./routes/channels.js";
+import {
+  registry,
+  httpRequestsTotal,
+  httpErrorsTotal,
+  wsMessagesSentTotal,
+  wsMessagesReceivedTotal,
+  wsErrorsTotal,
+} from "./metrics.js";
 
 const app = express();
 app.use(cors({ origin: env.corsOrigin }));
 app.use(express.json());
+
+// One counter increment per finished response, labeled with the matched route
+// pattern (not the raw path, which would blow up cardinality with every distinct
+// channelId/sampleId) — req.route is only populated once Express has matched a
+// route, so this reads it in the 'finish' listener rather than up front.
+app.use((req, res, next) => {
+  res.on("finish", () => {
+    const route = req.route?.path ? `${req.baseUrl}${req.route.path}` : req.path;
+    httpRequestsTotal.inc({ method: req.method, route, status: String(res.statusCode) });
+  });
+  next();
+});
+
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
+app.get("/metrics", async (_req, res) => {
+  res.set("Content-Type", registry.contentType);
+  res.send(await registry.metrics());
+});
 app.use("/api", tracksRouter);
 app.use("/api", autosaveRouter);
 app.use("/api", samplesRouter);
+app.use("/api", stemsRouter);
 app.use("/api", channelsRouter);
 
 // Catches everything asyncHandler forwards, plus sync throws and unknown-route 404s
 // that Express falls through to. Every /api response is guaranteed JSON from here on —
 // nothing hangs or silently 500s with an HTML page the client can't parse.
-const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   console.error("request failed", err);
+  httpErrorsTotal.inc({ route: req.route?.path ? `${req.baseUrl}${req.route.path}` : req.path });
   res.status(500).json({ error: err instanceof Error ? err.message : "internal error" });
 };
 app.use(errorHandler);
@@ -69,6 +97,7 @@ wss.on("connection", (ws) => {
       // Otherwise this is an unhandled rejection: the client's send just vanishes with
       // no response at all, and "evaluate"/"save" appear to silently do nothing.
       console.error("failed to handle ws message", err);
+      wsErrorsTotal.inc();
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(
           JSON.stringify({
@@ -76,6 +105,7 @@ wss.on("connection", (ws) => {
             message: err instanceof Error ? err.message : "failed to process message",
           }),
         );
+        wsMessagesSentTotal.inc();
       }
     }
   });
@@ -87,6 +117,7 @@ wss.on("connection", (ws) => {
     } catch {
       throw new Error("received malformed (non-JSON) message");
     }
+    wsMessagesReceivedTotal.inc({ type: msg.type });
 
     if (msg.type === "join") {
       const channelId = msg.channelId;
@@ -109,6 +140,7 @@ wss.on("connection", (ws) => {
       // Direct ack (not a Kafka event) so the client learns its own userId and can
       // ignore self-echoed events coming back through the broadcast loop below.
       ws.send(JSON.stringify({ type: "joined", userId: client.userId, channelId }));
+      wsMessagesSentTotal.inc();
 
       await publishChannelEvent({
         type: "user:joined",

@@ -203,20 +203,32 @@ channel/room id. Open the same URL in a second tab (or another browser) to see l
 
 ## Telemetry (OpenTelemetry + Jaeger)
 
-The gateway is instrumented with the OpenTelemetry Node SDK's auto-instrumentation
-(`apps/gateway/src/telemetry.ts`, imported first thing in `index.ts` so http/express/pg/ws
-get patched before anything else touches them). It exports traces over OTLP/HTTP to an
-`otel-collector` container, which forwards them on to `jaeger` (native OTLP, no
-jaeger-specific exporter needed) for viewing.
+The gateway is instrumented with the OpenTelemetry Node SDK (`apps/gateway/src/telemetry.ts`,
+imported first thing in `index.ts` so `http`/`express` get patched before anything else
+touches them). It exports traces over OTLP/HTTP to an `otel-collector` container, which
+forwards them on to `jaeger` (native OTLP, no jaeger-specific exporter needed) for viewing.
 
 ```mermaid
 flowchart LR
     gw["gateway"] -- "OTLP/HTTP" --> col["otel-collector"] -- "OTLP/gRPC" --> jae["jaeger"] --> ui(["Jaeger UI"])
 ```
 
-Traces cover incoming HTTP requests (`/api/*`), outgoing Postgres queries, and WebSocket
-handling — enough to see, e.g., a `save` request's full path from `/api/tracks` down
-through the `pg` query it issued.
+Traces cover incoming HTTP requests (`/api/*`), WebSocket handling, and every one of this
+app's three database calls — Postgres queries, Kafka produce/consume, and RustFS/S3
+object calls — enough to see, e.g., a `save` request's full path from `/api/tracks` down
+through the `pg` query it issued, or a sample upload down through its `s3.putObject`.
+
+**Why Postgres/Kafka/S3 use manual spans instead of auto-instrumentation:** the standard
+approach (`getNodeAutoInstrumentations()` in `telemetry.ts`) covers `pg`, `kafkajs`, and
+friends out of the box — but only via a require/import hook that patches each package the
+moment it's loaded, and confirmed against a live run, that hook doesn't fire under Bun for
+packages this app reaches through ESM `import` (only Node's own core `http`/`net` modules
+still get patched, since those are patched directly rather than via the hook). Rather than
+depend on that, `db.ts` (wraps `pool.query` once, so every route gets it for free),
+`kafka.ts` (`publishChannelEvent` / the consumer's `eachMessage`), and `storage.ts` (every
+`putObject`/`getObject`/`statObject`/`removeObject` call) each start their own span by hand,
+using the `tracer` `telemetry.ts` exports. Revisit this if a future OTel/Bun release closes
+that hook gap — the manual spans could then be dropped in favor of the bundled ones.
 
 - `otel-collector` publishes no host port, same reasoning as kafka/postgres/rustfs — only
   the gateway talks to it, over Docker-internal DNS (`otel-collector:4317`/`4318`).

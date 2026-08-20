@@ -38,6 +38,24 @@ declare module "@strudel/web" {
   ): Promise<unknown>;
   export function aliasBank(source: string | Record<string, string | string[]>): Promise<unknown>;
   export function getAudioContext(): AudioContext;
+
+  export interface SoundEntry {
+    onTrigger: unknown;
+    data?: {
+      type?: "sample" | "synth" | string;
+      tag?: string;
+      samples?: string[] | Record<string, string[]>;
+    };
+  }
+
+  /** nanostores `map()` store — the live registry of every registered sound name, same
+   * shape as apps/web/src/strudel-web.d.ts's copy (see strudel.ts's
+   * listRegisteredSounds). */
+  export const soundMap: {
+    get(): Record<string, SoundEntry>;
+    listen(cb: (value: Record<string, SoundEntry>) => void): () => void;
+    setKey(key: string, value: SoundEntry | undefined): void;
+  };
   /**
    * Directly schedules one sound through superdough's synth/sample engine, bypassing the
    * pattern scheduler entirely — used for pad triggers and sample-shelf previews so hitting

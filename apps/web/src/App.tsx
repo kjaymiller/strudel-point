@@ -15,6 +15,14 @@ import type {
   StrudelJson,
   Track,
 } from "@strudel-point/shared";
+import {
+  groupSampleBanks,
+  bankSampleUrls,
+  requestStemSeparation,
+  SampleEditor,
+  type SampleEditorHandle,
+  type StemResult,
+} from "@strudel-point/library";
 import { Editor, type EditorHandle } from "./components/Editor";
 import type { SliderWidgetConfig } from "@strudel/codemirror/slider.mjs";
 import { ChannelBar } from "./components/ChannelBar";
@@ -22,7 +30,6 @@ import { RoomSwitcher } from "./components/RoomSwitcher";
 import { SaveDialog } from "./components/SaveDialog";
 import { SoundBank, type SoundBankEntry } from "./components/SoundBank";
 import { CustomSamples, playableName } from "./components/CustomSamples";
-import { BeatAnalyzer, type BeatAnalyzerHandle } from "./components/BeatAnalyzer";
 import { LiveWaveform } from "./components/LiveWaveform";
 import { RenameIcon, SaveIcon, DeleteIcon } from "./components/Icon";
 import { useChannelSocket } from "./ws";
@@ -73,28 +80,18 @@ async function jsonOrThrow(res: Response) {
 /**
  * Registers every custom sample for playback, grouping any that share a `bankName` into one
  * Strudel bank (`samples({ [bankName]: [url0, url1, ...] })`, playable as s("bankName:0")
- * etc.) instead of registering each slice under its own standalone name. Recomputed from the
- * full current list each time, so it's idempotent and self-corrects regardless of the order
- * bank slices arrive in (relevant for peers receiving `sample:added` one slice at a time).
+ * etc.) instead of registering each slice under its own standalone name — the same
+ * grouping every strudel-point app now shares (see @strudel-point/library's banks.ts).
+ * Recomputed from the full current list each time, so it's idempotent and self-corrects
+ * regardless of the order bank slices arrive in (relevant for peers receiving
+ * `sample:added` one slice at a time).
  */
 async function registerAllSamples(samples: CustomSample[]) {
   const strudel = await getStrudel();
-  const banks = new Map<string, CustomSample[]>();
-  const singles: CustomSample[] = [];
-  for (const s of samples) {
-    if (s.bankName) banks.set(s.bankName, [...(banks.get(s.bankName) ?? []), s]);
-    else singles.push(s);
-  }
+  const { banks, singles } = groupSampleBanks(samples);
   await Promise.all([
     ...singles.map((s) => strudel.samples({ [s.name]: s.url })),
-    ...[...banks.entries()].map(([bankName, slices]) =>
-      strudel.samples({
-        [bankName]: slices
-          .slice()
-          .sort((a, b) => (a.bankIndex ?? 0) - (b.bankIndex ?? 0))
-          .map((s) => s.url),
-      }),
-    ),
+    ...banks.map((bank) => strudel.samples({ [bank.bankName]: bankSampleUrls(bank) })),
   ]);
 }
 
@@ -149,7 +146,7 @@ export default function App() {
     "idle",
   );
   const editorRef = useRef<EditorHandle>(null);
-  const beatAnalyzerRef = useRef<BeatAnalyzerHandle>(null);
+  const sampleEditorRef = useRef<SampleEditorHandle>(null);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mainRef = useRef<HTMLDivElement>(null);
 
@@ -477,7 +474,7 @@ export default function App() {
     [handleLocalChange],
   );
 
-  // Shared by plain "my sounds" uploads and BeatAnalyzer's per-slice bank uploads —
+  // Shared by plain "my sounds" uploads and the sample editor's per-slice bank uploads —
   // bankName/bankIndex are omitted for the former.
   const uploadSample = useCallback(
     async (file: File, name: string, bankName?: string, bankIndex?: number) => {
@@ -518,8 +515,8 @@ export default function App() {
     [uploadSample, reportError],
   );
 
-  // BeatAnalyzer only calls this once cuts are confirmed — nothing is uploaded while the
-  // user is still previewing/dragging cut points client-side.
+  // The sample editor only calls this once cuts are confirmed — nothing is uploaded
+  // while the user is still previewing/dragging cut points client-side.
   const handleUploadSlice = useCallback(
     (file: File, name: string, bankName: string, bankIndex: number) =>
       uploadSample(file, name, bankName, bankIndex),
@@ -529,10 +526,31 @@ export default function App() {
   // "chop" / "merge & chop" in CustomSamples: hand the picked sound(s) off to the sample
   // editor to be re-decoded, (merged if more than one), and re-analyzed for cuts.
   const handleEditSamples = useCallback((samples: CustomSample[]) => {
-    beatAnalyzerRef.current?.loadFromSamples(
+    sampleEditorRef.current?.loadFromSamples(
       samples.map((s) => ({ url: s.url, label: playableName(s) })),
     );
   }, []);
+
+  // Feeds the sample editor's "separate into stems" button (see
+  // @strudel-point/library's SampleEditor.tsx). The four returned stems are already
+  // stored server-side by the time this resolves — this just registers them into this
+  // app's own Strudel module/sound bank (same as any other new upload) and announces
+  // them so peers pick them up too.
+  const handleSeparateStems = useCallback(
+    async (file: File, baseName: string): Promise<StemResult[]> => {
+      const stems = await requestStemSeparation(channelId, file, baseName);
+      let next: CustomSample[] = [];
+      setCustomSamples((prev) => {
+        next = [...stems, ...prev];
+        return next;
+      });
+      await registerAllSamples(next);
+      setSoundBank(await listRegisteredSounds());
+      for (const sample of stems) send({ type: "sample:added", sample });
+      return stems.map((s) => ({ name: playableName(s), url: s.url }));
+    },
+    [channelId, send],
+  );
 
   const handleDeleteSample = useCallback(
     async (sample: CustomSample) => {
@@ -591,7 +609,13 @@ export default function App() {
       try {
         const strudel = await getStrudel();
         const ac = strudel.getAudioContext();
-        await strudel.superdough({ s: name }, ac.currentTime + 0.01, 0.2);
+        // `name` may be plain ("foo") or mini-notation-style bank addressing ("foo:0") — the
+        // ":n" suffix is only ever split into separate s/n fields by Strudel's mini-notation
+        // parser, never by superdough itself, so it has to be split here or a bank slice's
+        // registry lookup silently misses (the whole "foo:0" string was never a registered key).
+        const match = /^(.*):(\d+)$/.exec(name);
+        const hap = match ? { s: match[1], n: Number(match[2]) } : { s: name };
+        await strudel.superdough(hap, ac.currentTime + 0.01, 0.2);
       } catch (err) {
         reportError(`couldn't preview "${name}": ${err instanceof Error ? err.message : err}`);
       }
@@ -745,20 +769,22 @@ export default function App() {
 
           {sidebarTab === "sounds" && (
             <>
-              <h2>my sounds</h2>
+              <h2>sample editor</h2>
+              <SampleEditor
+                ref={sampleEditorRef}
+                onUploadSlice={handleUploadSlice}
+                onRenameBank={renameBank}
+                onSeparateStems={handleSeparateStems}
+              />
+              <h2 style={{ marginTop: 20 }}>my sounds</h2>
               <CustomSamples
                 samples={customSamples}
                 onUpload={handleUploadSample}
                 onDelete={handleDeleteSample}
+                onPreview={previewSound}
                 onPick={insertSoundName}
                 onRenameBank={renameBank}
                 onEditSamples={handleEditSamples}
-              />
-              <h2 style={{ marginTop: 20 }}>sample editor</h2>
-              <BeatAnalyzer
-                ref={beatAnalyzerRef}
-                onUploadSlice={handleUploadSlice}
-                onRenameBank={renameBank}
               />
             </>
           )}

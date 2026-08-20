@@ -53,3 +53,14 @@ async function resumeAudioContext() {
     // see apps/web/src/strudel.ts — nothing useful to do if resume() itself rejects
   }
 }
+
+/** Reads the live sound registry — accurate to whatever packs + this room's own custom
+ * banks (registered by App.tsx's refreshBanks) actually ended up loaded, not a guess.
+ * Feeds @strudel-point/library's <LibraryDrawer> "all sounds" tab. */
+export async function listRegisteredSounds() {
+  const strudel = await getStrudel();
+  const registry = strudel.soundMap.get();
+  return Object.entries(registry)
+    .map(([name, entry]) => ({ name, type: entry.data?.tag ?? entry.data?.type ?? "sound" }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}

@@ -1,0 +1,23 @@
+[project]
+name = "strudel-point-spleeter"
+version = "0.1.0"
+description = "Dedicated stem-separation service — thin Flask wrapper around Spleeter."
+requires-python = ">=3.8,<3.12"
+dependencies = [
+    # spleeter 2.4.2 (current PyPI release — not 2.4.0, which is stale) declares its own
+    # tensorflow==2.12.1 and numpy<2.0.0, which is why those aren't repeated here:
+    # letting spleeter's own pin win avoids a second source of truth. TensorFlow 2.12.1
+    # ships manylinux_2_17_aarch64 wheels, so this builds natively on Apple Silicon
+    # Docker — no amd64 emulation needed.
+    "spleeter==2.4.2",
+    # Pinned down from latest (3.0.3): spleeter pulls in typer==0.3.2, which requires
+    # click<7.2.0 — incompatible with flask>=2.1's click>=8.0 requirement. flask 2.0.3 +
+    # click==7.1.2 is the highest combination that satisfies both.
+    "flask==2.0.3",
+    "click==7.1.2",
+    # flask 2.0.3 only declares werkzeug>=2.0 with no upper bound, so an unpinned
+    # resolve grabs the latest werkzeug — which dropped `url_quote` (removed in 2.3) that
+    # flask 2.0.3's own code still imports. Pin to the last 2.0.x werkzeug release.
+    "werkzeug==2.0.3",
+    "prometheus-client==0.21.1",
+]

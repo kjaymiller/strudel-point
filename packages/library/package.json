@@ -1,0 +1,19 @@
+{
+  "name": "@strudel-point/library",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "peerDependencies": {
+    "react": "^18.3.1"
+  },
+  "dependencies": {
+    "@strudel-point/shared": "*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.17",
+    "react": "^18.3.1",
+    "typescript": "^5.7.2"
+  }
+}

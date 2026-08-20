@@ -78,6 +78,29 @@ services:
       timeout: 5s
       retries: 10
 
+  # Stem separation for the sample editor's "separate into stems" action (see
+  # apps/gateway/src/routes/stems.ts, the one caller, and packages/library/src/
+  # SampleEditor.tsx for the UI). No host port published — same reasoning as
+  # kafka/postgres/rustfs above, only the gateway ever talks to this, over Docker-internal
+  # DNS (spleeter:8100).
+  #
+  # UNVERIFIED — flagging clearly rather than guessing quietly, same convention as
+  # rustfs's own entry above: I haven't actually built this image from here. See
+  # apps/spleeter/Dockerfile's own header for specifics on what's unverified about it.
+  # Health-checked over plain HTTP (not wget's usual `--spider`, same S3-style-403
+  # reasoning as rustfs doesn't apply here, but a first build can take a long time to
+  # bake the model in — the generous `start_period` is for that, not for slow requests).
+  spleeter:
+    build:
+      context: apps/spleeter
+    container_name: strudel-point-spleeter
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8100/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
   gateway:
     build:
       context: .
@@ -98,6 +121,7 @@ services:
       S3_ENDPOINT: rustfs
       S3_ACCESS_KEY: strudel
       S3_SECRET_KEY: strudel-dev-secret
+      SPLEETER_URL: http://spleeter:8100
       CORS_ORIGIN: "*" # only Vite's server-side proxy calls the gateway; browser never does
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_SERVICE_NAME: strudel-point-gateway
@@ -108,6 +132,14 @@ services:
       kafka: { condition: service_healthy }
       postgres: { condition: service_healthy }
       rustfs: { condition: service_healthy }
+      # service_started, not service_healthy like kafka/postgres/rustfs above — spleeter's
+      # healthcheck can take a long time (or never pass, given how fragile its dependency
+      # pins are) and stem separation is one optional feature, not core to the app; the
+      # rest of the gateway shouldn't be held hostage to it starting. A request that hits
+      # /separate before spleeter is actually ready just fails with a clear "couldn't
+      # reach the stem-separation service" error (see routes/stems.ts) instead of the
+      # whole stack refusing to come up.
+      spleeter: { condition: service_started }
       otel-collector: { condition: service_started }
 
   web:
@@ -167,6 +199,28 @@ services:
     depends_on:
       - gateway
 
+  patch-panel:
+    build:
+      context: .
+      dockerfile: apps/patch-panel/Dockerfile.dev
+    container_name: strudel-point-patch-panel
+    # A fourth independent app (same idea as dj/pads) — a Novation-Peak-style synth
+    # designer (oscillator, filter, amp/pitch envelopes, filter + vibrato LFOs) that
+    # triggers voices directly via superdough for live preview, and can turn the current
+    # patch + a played sequence into real Strudel source, same as pads' rack. Still
+    # reachable directly on whichever port in this range Docker picks free, but also
+    # fronted by `caddy` at /patch on one origin — BASE_PATH makes this container's own
+    # asset/module requests carry that /patch prefix (see apps/patch-panel/vite.config.ts).
+    ports:
+      - "5191-5196:5191"
+    environment:
+      BASE_PATH: "/patch/"
+    volumes:
+      - .:/app
+      - strudel-point-patch-panel-node-modules:/app/node_modules
+    depends_on:
+      - gateway
+
   # All-in-one Jaeger: UI + native OTLP receiver + in-memory storage. In-memory means
   # traces don't survive `docker compose down` — fine for local dev, swap the storage
   # backend (Cassandra/Elasticsearch/etc via env) if you need durable traces.
@@ -201,6 +255,25 @@ services:
     depends_on:
       jaeger: { condition: service_healthy }
 
+  # Scrapes gateway's and spleeter's /metrics endpoints (see apps/gateway/src/metrics.ts
+  # and apps/spleeter/server.py) — separate signal from the otel-collector/jaeger pair
+  # above (traces), not a replacement for it. Config lives in ./prometheus/prometheus.yml,
+  # not inline here, so it stays diffable/reviewable on its own.
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: strudel-point-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - strudel-point-prometheusdata:/prometheus
+    # A small range, not a single port (same idea as jaeger/web/dj/pads above): Docker
+    # binds whichever's actually free. Run `docker compose port prometheus 9090` (or
+    # `docker compose ps`) to see which it picked.
+    ports:
+      - "9090-9095:9090"
+    depends_on:
+      gateway: { condition: service_started }
+      spleeter: { condition: service_started }
+
   caddy:
     image: caddy:2-alpine
     container_name: strudel-point-caddy
@@ -223,3 +296,5 @@ volumes:
   strudel-point-web-node-modules:
   strudel-point-dj-node-modules:
   strudel-point-pads-node-modules:
+  strudel-point-patch-panel-node-modules:
+  strudel-point-prometheusdata:

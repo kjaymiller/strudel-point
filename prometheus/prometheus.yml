@@ -1,0 +1,17 @@
+# Scrape targets for the strudel-point stack's two actual backend processes — see
+# docker-compose.yml's `prometheus` service. dj/pads/web/patch-panel are pure browser
+# SPAs (Vite dev servers, not long-running app processes with their own state to
+# expose), so there's nothing meaningful for Prometheus to pull from them; gateway and
+# spleeter are the only services with a /metrics endpoint (see
+# apps/gateway/src/metrics.ts and apps/spleeter/server.py).
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: gateway
+    static_configs:
+      - targets: ["gateway:8787"]
+
+  - job_name: spleeter
+    static_configs:
+      - targets: ["spleeter:8100"]

@@ -1,0 +1,981 @@
+/* Its own palette, unlike apps/web/dj/pads' shared teal-on-charcoal — this app is a
+   hardware-synth control surface (VCO/VCF/VCA, rotary knobs), so it gets a warmer,
+   brushed-metal-and-amber-LED look instead, closer to what it's actually imitating. */
+:root {
+  color-scheme: dark;
+  --bg: #15120e;
+  --panel: #221c15;
+  --panel-hi: #2b241b;
+  --border: #3a2f22;
+  --text: #f0e6da;
+  --muted: #a4967f;
+  --accent: #f2a33d;
+  font-family: -apple-system, "Inter", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button {
+  background: var(--accent);
+  color: #0b0b0d;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 400;
+}
+
+button.secondary.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+input,
+select {
+  background: #100d0a;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+kbd {
+  font-family: inherit;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* --- layout shell, same convention as apps/pads/src/styles.css's .pads-app/.pads-header --- */
+
+.patch-app {
+  min-height: 100vh;
+  padding: 16px 20px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.patch-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.patch-header h1 {
+  font-size: 18px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.room-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.room-form label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.connection-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #4a2418;
+  flex: 0 0 auto;
+}
+
+.connection-dot.connected {
+  background: var(--accent);
+}
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  margin-bottom: 16px;
+  background: #3a1c14;
+  color: #ffe0c8;
+  border-radius: 6px;
+}
+
+.error-banner span {
+  flex: 1;
+  word-break: break-word;
+}
+
+/* --- module toolbar (free-patch rack — see modules.ts) --- */
+
+.module-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.module-toolbar button {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.unterminated-hint {
+  margin-bottom: 16px;
+  padding: 8px 16px;
+  background: #3a1c14;
+  color: #ffe0c8;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+/* --- preset bar --- */
+
+.preset-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.preset-bar select {
+  flex: 0 0 auto;
+}
+
+.preset-bar input {
+  flex: 1;
+  max-width: 200px;
+}
+
+/* --- synth panels --- */
+
+.patch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* The drop target each module card sits in (see App.tsx's moveModule) — just a plain
+   grid cell wrapper, contributing no layout of its own beyond what the card inside it
+   already has, so the grid looks identical to before reordering existed. */
+.module-slot {
+  display: contents;
+}
+
+/* Falls back to the plain dark gradient until a panel's own color swatch (see
+   components/PanelColorSwatch.tsx) sets --panel-accent on this section — then the
+   faceplate itself is tinted with that color, same as a differently-colored Eurorack
+   module in an otherwise-uniform rack. Mixing --panel-accent into each stop's own default
+   (rather than mixing two different colors together) means an unset swatch mixes a color
+   with itself, i.e. no change at all — this needs no separate "is it set" branching. */
+.panel {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel-accent, var(--panel-hi)) 30%, var(--panel-hi)),
+    color-mix(in srgb, var(--panel-accent, var(--panel)) 20%, var(--panel))
+  );
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.panel h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* --- module card header (every free-patch module — see components/ModuleHeader.tsx) --- */
+
+.module-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.module-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Drag this to reorder the module in the rack (see App.tsx's moveModule) — a grip glyph,
+   not a real button, since its only job is starting a native HTML5 drag. */
+.module-drag-handle {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.module-drag-handle:active {
+  cursor: grabbing;
+}
+
+.module-name-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 8px;
+}
+
+/* The Output module's name isn't editable (it's a fixed singleton) — same visual weight
+ * as the input everywhere else uses, just plain text instead of a control. */
+.module-name-static {
+  display: inline-flex;
+  align-items: center;
+}
+
+.module-kind-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.module-remove {
+  padding: 4px 9px;
+  line-height: 1;
+  font-size: 14px;
+}
+
+.output-module-card {
+  align-self: start;
+}
+
+.transport-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+/* A title row that also carries a PanelColorSwatch — same title styling as bare `.panel
+   h3`, just laid out alongside the swatch instead of alone. */
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.panel-title-row h3 {
+  margin: 0;
+}
+
+.panel-color-swatch {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.panel-color-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.panel-color-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+
+.knob-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+/* --- knob (a real rotary dial, see components/Knob.tsx) --- */
+
+.knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 56px;
+}
+
+.knob-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.knob-dial {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #3a3024, #17130e 70%);
+  border: 1px solid var(--border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.5),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+  cursor: ns-resize;
+  touch-action: none;
+  position: relative;
+}
+
+.knob-dial:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The turning pointer — a short bright tick from center toward the rim, rotated in JS by
+   the knob's current value. transform-origin stays centered so it reads as "this knob
+   turned to point here", same as a real potentiometer's indicator line. */
+.knob-indicator {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+
+.knob-indicator::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 2px;
+  height: 14px;
+  background: var(--accent);
+  border-radius: 1px;
+  transform: translateX(-50%);
+  box-shadow: 0 0 4px rgba(242, 163, 61, 0.6);
+}
+
+.knob-value {
+  font-size: 11px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- oscillator/filter type picker (a row of toggle buttons standing in for a rotary
+   switch) --- */
+
+.waveform-select {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+/* --- sampler (a voice source sibling to the VCO — see modules.ts's isVoiceSource) --- */
+
+.sampler-name {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.sampler-name-input {
+  width: 110px;
+  text-align: center;
+  font-family: ui-monospace, monospace;
+}
+
+.waveform-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.waveform-buttons button {
+  padding: 6px 9px;
+  font-size: 13px;
+}
+
+/* The waveform/filter-type toggle buttons — same solid look the base `button` rule
+   already gives everything else (this is just a renamed, explicit version of that same
+   default, since "active"/"secondary" alone left the active state relying on the bare
+   button fallback). Panel color (see PanelColorSwatch) only tints the faceplate
+   background, not this — stays the global accent so a selected state always reads the
+   same regardless of a panel's color. */
+button.toggle-active {
+  background: var(--accent);
+  color: #0b0b0d;
+}
+
+/* --- scope --- */
+
+.scope-panel {
+  margin-bottom: 16px;
+}
+
+.scope-canvas {
+  display: block;
+  width: 100%;
+  height: 140px;
+  border-radius: 6px;
+  background: #000; /* drawTimeScope clears to black itself every frame; this is just the pre-first-frame color */
+}
+
+/* --- patch bay: jacks + cables (see cables.ts/PatchBay.tsx) --- */
+
+.patchbay-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.cable {
+  fill: none;
+  /* --cable-color is set per-path (see PatchBay.tsx's cableColor) so each connection
+     reads as visually distinct, same as a real patch bay's assorted cable colors — the
+     var()'s fallback only ever applies to the in-progress drag line below, which has no
+     committed cable (and so no key to color it by) yet. */
+  stroke: var(--cable-color, var(--accent));
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.85;
+  filter: drop-shadow(0 0 3px var(--cable-color, rgba(242, 163, 61, 0.4)));
+  /* The overlay itself is pointer-events: none (so it never blocks clicks on the knobs/
+     jacks/buttons underneath) — this punches a hit-testable hole back open along just the
+     stroked line itself (not the path's invisible bounding box), so a committed cable
+     can still be clicked to unplug it (see PatchBay.tsx's removeCable) without the gaps
+     between cables intercepting anything. */
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.cable-dragging {
+  opacity: 0.6;
+  stroke-dasharray: 6 5;
+  /* The in-progress drag preview isn't a real cable yet — nothing to click. */
+  pointer-events: none;
+}
+
+.jack-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.jack-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.jack {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  padding: 0;
+  background: #17130e;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.jack-source {
+  border-color: #6b5a3e;
+}
+
+.jack.plugged {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 6px rgba(242, 163, 61, 0.6);
+}
+
+/* Highlighted on the one valid destination while a cable is mid-drag from its source. */
+.jack.jack-target {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+/* Its own module card now (see components/SequencerModuleCard.tsx), so no separator is
+   needed here — ModuleHeader + .module-card's flex gap already spaces it from the header
+   above, same as every other module card's body. */
+.sequencer-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.sequencer-out-jack {
+  align-self: flex-end;
+}
+
+.sequence-heading {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.mode-toggle {
+  margin-right: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.mode-toggle .secondary {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* --- signal gen (clock/gate generator, no pitch — see sequencer.ts) --- */
+
+.signalgen-panel {
+  margin-bottom: 16px;
+}
+
+.signalgen-header {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.signalgen-header h3 {
+  margin: 0;
+  align-self: center;
+}
+
+.signalgen-header .secondary {
+  align-self: center;
+}
+
+.signalgen-header .panel-color-swatch {
+  align-self: center;
+}
+
+.gate-row {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 6px;
+}
+
+.gate {
+  height: 44px;
+  border-radius: 4px;
+  background: #100d0a;
+  border: 1px solid var(--border);
+  padding: 0;
+  cursor: pointer;
+}
+
+.gate.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 6px rgba(242, 163, 61, 0.5);
+}
+
+.gate.current {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+
+/* --- EOS trigger (one pulse per cycle, no controls — see components/EosModuleCard.tsx) --- */
+
+.eos-pulse {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #100d0a;
+  border: 1px solid var(--border);
+  transition: background 60ms ease-out, box-shadow 60ms ease-out;
+}
+
+.eos-pulse.on {
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(242, 163, 61, 0.7);
+}
+
+/* --- sequence + save --- */
+
+.sequence-panel {
+  margin-bottom: 16px;
+}
+
+.sequence-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sequence-input {
+  flex: 1;
+  font-family: ui-monospace, monospace;
+}
+
+.hold-note-input {
+  flex: 1;
+  font-family: ui-monospace, monospace;
+}
+
+.hold-cycles-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.hold-cycles-input {
+  width: 60px;
+}
+
+.sequence-presets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.sequence-presets button {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* --- library drawer (@strudel-point/library's <LibraryDrawer>/<LibraryTray> — sounds +
+   this room's saved tracks, shared across every strudel-point app; toggled open so it
+   never eats into the play space) --- */
+
+.library-drawer-toggle {
+  padding: 10px 6px;
+  border-radius: 8px 0 0 8px;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.library-drawer-right .library-drawer-toggle {
+  border-radius: 8px 0 0 8px;
+}
+
+.library-drawer-left .library-drawer-toggle {
+  border-radius: 0 8px 8px 0;
+}
+
+.library-drawer-panel {
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.4);
+  padding: 14px 16px;
+}
+
+.library-drawer-left .library-drawer-panel {
+  border-left: none;
+  border-right: 1px solid var(--border);
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.4);
+}
+
+.library-tray h3,
+.library-section-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 12px 0 6px;
+}
+
+.library-my-sounds {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+}
+
+.library-bank-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.library-bank-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--accent);
+  font-family: ui-monospace, monospace;
+  cursor: pointer;
+}
+
+.library-bank-collapse-arrow {
+  font-size: 10px;
+}
+
+.library-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.library-tab {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.library-search {
+  width: 100%;
+  margin-bottom: 8px;
+  font-family: ui-monospace, monospace;
+}
+
+.library-sound-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.library-sound-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  cursor: grab;
+}
+
+.library-sound-name {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 400;
+}
+
+.library-sound-name:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.library-sound-edit {
+  padding: 4px 6px;
+  font-size: 11px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.library-sound-edit:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.library-sound-select {
+  cursor: pointer;
+}
+
+.library-merge-button {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+
+.library-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.library-track-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: grab;
+}
+
+.library-track-title {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-empty {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+/* --- sample editor (@strudel-point/library's <SampleEditor>, the library drawer's
+   "edit" tab — resample/stem-separate/chop a beat into a bank; see SampleEditor.tsx) --- */
+
+.track {
+  position: relative;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.dropzone {
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 16px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: 16px;
+}
+
+.dropzone.dragover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sample-editor-error {
+  color: #ff9b9b;
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+
+.sample-editor-hint {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 8px 0 0;
+}
+
+.sample-editor-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.sample-editor-waveform {
+  position: relative;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.sample-editor-cut-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  cursor: ew-resize;
+}
+
+.sample-editor-cycles-row,
+.sample-editor-resample-row,
+.sample-editor-stems-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.sample-editor-slices {
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.sample-editor-slice {
+  font-size: 12px;
+}
+
+.sample-editor-done {
+  color: var(--accent);
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+
+.code-preview {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: #100d0a;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+
+.save-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.save-row input {
+  flex: 1;
+  min-width: 160px;
+}
+
+.share-link {
+  font-size: 12px;
+  color: var(--accent);
+  word-break: break-all;
+}

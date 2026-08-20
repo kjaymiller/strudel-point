@@ -92,6 +92,56 @@ export function splitTrackCode(code: string): { bpm: number | null; pattern: str
 }
 
 /**
+ * Pulls out Strudel's own top-level `$: <pattern>` syntax — a real JS labeled statement
+ * (the label is literally the identifier `$`) that the main editor's transpiler picks up
+ * to schedule each such line as its own simultaneous pattern, the same thing multiple
+ * `$:` lines or a manual `stack(...)` would give you. That's exactly why every track this
+ * room's editor saves tends to have one (see the sample tracks in `tracks` table): it's
+ * the normal way to write "more than one thing playing at once" in Strudel.
+ *
+ * A deck here needs one expression to chain `.speed()`/`.gain()`/etc onto, not a handful
+ * of separately-scheduled top-level statements — and a label can't legally sit inside a
+ * `return (...)` expression anyway (that's a hard syntax error, not a silent miss). So
+ * this collapses every active (non-comment) `$: expr` line into one `stack(...)` of those
+ * exprs before wrapTrackExpression ever sees the pattern, leaving any other statements
+ * (a `let` setup line, etc) alone. Multi-line `$: expr`s are supported via a plain
+ * paren/bracket depth count across lines — no backtick-awareness, since mini-notation
+ * strings realistically don't contain stray `(`/`)`/`[`/`]` themselves; another
+ * heuristic, not a parser, same spirit as wrapTrackExpression below.
+ */
+function extractDollarPatterns(pattern: string): { setup: string; expr: string } | null {
+  const lines = pattern.split("\n");
+  const setupLines: string[] = [];
+  const exprs: string[] = [];
+  let current: string | null = null;
+  let depth = 0;
+  const bracketDelta = (line: string) =>
+    (line.match(/[([{]/g)?.length ?? 0) - (line.match(/[)\]}]/g)?.length ?? 0);
+  for (const line of lines) {
+    if (current === null) {
+      const match = line.match(/^\s*\$:\s*(.+)$/);
+      if (!match) {
+        setupLines.push(line);
+        continue;
+      }
+      current = match[1].replace(/;\s*$/, "");
+      depth = bracketDelta(current);
+    } else {
+      current += `\n${line.replace(/;\s*$/, "")}`;
+      depth += bracketDelta(line);
+    }
+    if (depth <= 0) {
+      exprs.push(current);
+      current = null;
+    }
+  }
+  if (current !== null) exprs.push(current); // unterminated — best effort, still better than dropping it
+  if (exprs.length === 0) return null;
+  const expr = exprs.length === 1 ? exprs[0] : `stack(${exprs.join(", ")})`;
+  return { setup: setupLines.join("\n").trim(), expr };
+}
+
+/**
  * Wraps a track's pattern code so `.speed()`/`.gain()`/etc can be chained onto it as one
  * expression. Most tracks (anything this app itself saves, and plenty written by hand)
  * are already exactly that — one trailing expression, nothing else — and get wrapped in
@@ -105,6 +155,11 @@ export function splitTrackCode(code: string): { bpm: number | null; pattern: str
  * enough for what's realistically saved here without pulling in a real JS parser for it.
  */
 function wrapTrackExpression(pattern: string): string {
+  const dollarPatterns = extractDollarPatterns(pattern);
+  if (dollarPatterns) {
+    const { setup, expr } = dollarPatterns;
+    return setup ? `(() => {\n${setup}\nreturn (${expr});\n})()` : `(${expr})`;
+  }
   const looksLikeSingleExpression = !/;|^\s*(let|const|var|function)\b/m.test(pattern);
   if (looksLikeSingleExpression) return `(${pattern})`;
   const lines = pattern.split("\n");
