@@ -1,4 +1,5 @@
 import { WebSocket } from "ws";
+import { wsMessagesSentTotal } from "./metrics.js";
 
 interface Client {
   ws: WebSocket;
@@ -41,7 +42,10 @@ export function broadcastToChannel(channelId: string, payload: unknown, exclude?
   const data = JSON.stringify(payload);
   for (const client of room) {
     if (client.ws === exclude) continue;
-    if (client.ws.readyState === WebSocket.OPEN) client.ws.send(data);
+    if (client.ws.readyState === WebSocket.OPEN) {
+      client.ws.send(data);
+      wsMessagesSentTotal.inc();
+    }
   }
 }
 

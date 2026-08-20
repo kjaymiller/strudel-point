@@ -10,6 +10,7 @@ WORKDIR /app
 # cached unless a package.json/lockfile actually changes.
 COPY package.json bun.lock ./
 COPY packages/shared/package.json packages/shared/package.json
+COPY packages/library/package.json packages/library/package.json
 COPY apps/gateway/package.json apps/gateway/package.json
 COPY apps/web/package.json apps/web/package.json
 RUN bun install

@@ -167,10 +167,15 @@ export interface PadGridHandle {
 
 // A slice ref is always "bankName:index" (see parseSliceRef in chain.ts); bank names
 // themselves are sanitized to [a-zA-Z0-9_-] server-side, so they can never contain a
-// colon. A dropped string with no colon at all is therefore unambiguously "the whole
-// bank", not a slice — no separate tagging/wrapper needed to tell the two apart.
-function isBankName(dropped: string): boolean {
-  return !dropped.includes(":");
+// colon. A dropped string with no colon at all is therefore never a slice — but it's
+// not necessarily a fillable multi-slice bank either: a single custom sample (e.g. a
+// stem, which has no bankName of its own) also shows up here as its bare, colon-free
+// name (see App.tsx's groupBanks, which wraps each single in a one-slice fake "bank"
+// only so the shelf can render it uniformly). So this also needs the actual bank
+// looked up, to tell "drop the whole kit" apart from "drop this one sample onto this
+// one pad" — a one-slice bank always means the latter.
+function isBankName(dropped: string, bank: PadBank | undefined): boolean {
+  return !dropped.includes(":") && !!bank && bank.slices.length > 1;
 }
 
 /**
@@ -449,9 +454,9 @@ export const PadGrid = forwardRef<PadGridHandle, PadGridProps>(function PadGrid(
             setDragOverIndex(null);
             const dropped = e.dataTransfer.getData("text/plain").trim();
             if (!dropped) return;
-            if (isBankName(dropped)) {
-              const bank = bankByName.get(dropped);
-              if (bank) fillFromBank(bank);
+            const bank = bankByName.get(dropped);
+            if (isBankName(dropped, bank)) {
+              fillFromBank(bank as PadBank);
             } else {
               assignPad(index, dropped);
             }

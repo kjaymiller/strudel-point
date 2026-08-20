@@ -3,7 +3,13 @@
 // deployables that just happen to talk to the same gateway/room). See that file for the
 // long-form rationale on prebake/aliasBank ordering and the iOS resume() dance; unchanged
 // here because decks need exactly the same sample packs (dirt-samples + tidal drum
-// machines) available to resolve whatever bank names a room's custom samples used.
+// machines) available to resolve whatever bank names a room's custom samples used. This
+// app deliberately doesn't fetch/register a room's *custom* samples itself — see
+// App.tsx's handleEvent comment: sample/bank management belongs to apps/pads now — so
+// listRegisteredSounds below only ever reflects these built-in packs, not any custom
+// upload, for @strudel-point/library's <LibraryDrawer> "all sounds" tab.
+import type { RegisteredSound } from "@strudel-point/library";
+
 let strudelModule: typeof import("@strudel/web") | null = null;
 let repl: import("@strudel/web").StrudelRepl | null = null;
 
@@ -76,4 +82,13 @@ async function resumeAudioContext() {
   } catch {
     // see apps/web/src/strudel.ts — nothing useful to do if resume() itself rejects
   }
+}
+
+/** Reads the live sound registry — feeds @strudel-point/library's <LibraryDrawer>. */
+export async function listRegisteredSounds(): Promise<RegisteredSound[]> {
+  const strudel = await getStrudel();
+  const registry = strudel.soundMap.get();
+  return Object.entries(registry)
+    .map(([name, entry]) => ({ name, type: entry.data?.tag ?? entry.data?.type ?? "sound" }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }

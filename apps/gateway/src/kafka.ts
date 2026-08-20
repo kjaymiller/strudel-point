@@ -3,6 +3,7 @@ import { SpanStatusCode } from "@opentelemetry/api";
 import { CHANNEL_EVENTS_TOPIC, type ChannelEvent } from "@strudel-point/shared";
 import { env } from "./env.js";
 import { tracer } from "./telemetry.js";
+import { kafkaMessagesPublishedTotal, kafkaMessagesConsumedTotal, kafkaErrorsTotal } from "./metrics.js";
 
 // kafkajs's own pending-request scheduler occasionally computes a negative setTimeout
 // delay under Bun (a runtime clock-arithmetic quirk, not anything about our brokers or
@@ -91,9 +92,11 @@ export async function publishChannelEvent(event: ChannelEvent) {
         topic: CHANNEL_EVENTS_TOPIC,
         messages: [{ key: event.channelId, value: JSON.stringify(event) }],
       });
+      kafkaMessagesPublishedTotal.inc();
     } catch (err) {
       span.recordException(err as Error);
       span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error).message });
+      kafkaErrorsTotal.inc({ operation: "publish" });
       throw err;
     } finally {
       span.end();
@@ -113,10 +116,12 @@ export async function runConsumer(onEvent: (event: ChannelEvent) => void) {
           const event = JSON.parse(message.value!.toString("utf8")) as ChannelEvent;
           span.setAttribute("channel.id", event.channelId);
           onEvent(event);
+          kafkaMessagesConsumedTotal.inc();
         } catch (err) {
           console.error("failed to parse channel event", err);
           span.recordException(err as Error);
           span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error).message });
+          kafkaErrorsTotal.inc({ operation: "consume" });
         } finally {
           span.end();
         }

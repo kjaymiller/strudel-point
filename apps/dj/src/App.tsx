@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChannelEvent, CreateTrackInput, StrudelJson, Track } from "@strudel-point/shared";
+import { LibraryDrawer, getTrackDragData, type RegisteredSound } from "@strudel-point/library";
 import { Deck } from "./components/Deck";
-import { getStrudel, setCps } from "./strudel";
+import { getStrudel, setCps, listRegisteredSounds } from "./strudel";
 import { useChannelSocket } from "./ws";
 import { buildLiveCode, buildSetCode, splitTrackCode, type DeckConfig, type Scene } from "./chain";
 
@@ -95,6 +96,32 @@ export default function App() {
   const handleEvent = useCallback((_event: ChannelEvent) => {}, []);
 
   const { connected, send } = useChannelSocket({ channelId, username, onEvent: handleEvent, onError: reportError });
+
+  // Every sound this app's own Strudel module has registered — just the built-in packs
+  // (see strudel.ts's own comment on why dj doesn't fetch/register custom samples) — for
+  // @strudel-point/library's <LibraryDrawer> "all sounds" tab. No customSamples prop is
+  // passed, so its "my sounds" section stays hidden here — that's apps/pads' job.
+  const [registeredSounds, setRegisteredSounds] = useState<RegisteredSound[]>([]);
+  useEffect(() => {
+    listRegisteredSounds()
+      .then(setRegisteredSounds)
+      .catch((err) => reportError(`couldn't read sound registry: ${err instanceof Error ? err.message : err}`));
+  }, [reportError]);
+
+  const previewLibrarySound = useCallback(
+    (name: string) => {
+      // `name` may carry Strudel's "bank:index" mini-notation suffix (a registered
+      // sample bank slice) — superdough looks up `s` as a literal registry key and
+      // never splits that suffix itself, so it has to be split here or the lookup
+      // misses even though the bank is loaded.
+      const match = /^(.*):(\d+)$/.exec(name);
+      const hap = match ? { s: match[1], n: Number(match[2]) } : { s: name };
+      getStrudel()
+        .then((strudel) => strudel.superdough(hap, strudel.getAudioContext().currentTime + 0.05, 0.5))
+        .catch((err) => reportError(`couldn't preview "${name}": ${err instanceof Error ? err.message : err}`));
+    },
+    [reportError],
+  );
 
   useEffect(() => {
     const onHashChange = () => setChannelId(channelIdFromLocation());
@@ -379,6 +406,12 @@ export default function App() {
         </button>
       </header>
 
+      {/* The room's shared library, same drawer every strudel-point app renders (see
+          @strudel-point/library) — this room's saved Tracks (drag one onto either deck
+          below to load it there — see the deck-drop-target wrappers) and this app's own
+          registered sounds (built-in packs only, see strudel.ts). */}
+      <LibraryDrawer tracks={trackList} registeredSounds={registeredSounds} onPreviewSound={previewLibrarySound} />
+
       {error && (
         <div className="error-banner">
           <span>{error}</span>
@@ -398,26 +431,37 @@ export default function App() {
       )}
 
       <div className="decks">
-        <Deck
-          label="deck A"
-          deck={decks.A}
-          tracks={trackList}
-          isMaster={master === "A"}
-          onLoadTrack={(id) => {
-            const track = trackList.find((t) => t.id === id);
+        <div
+          className="deck-drop-target"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const dragged = getTrackDragData(e);
+            const track = dragged && trackList.find((t) => t.id === dragged.id);
             if (track) loadDeck("A", track);
           }}
-          onSetSpeed={(speed) => updateDeck("A", { speed })}
-          onSetGain={(gain) => updateDeck("A", { gain })}
-          onSetFx={(patch) => updateDeck("A", patch)}
-          onTogglePlaying={() => updateDeck("A", { playing: !decks.A?.playing })}
-          onCut={() => cutDeck("A")}
-          onMakeMaster={() => {
-            clearCodeDraft();
-            setMaster("A");
-          }}
-          onSync={() => syncDeck("A")}
-        />
+        >
+          <Deck
+            label="deck A"
+            deck={decks.A}
+            tracks={trackList}
+            isMaster={master === "A"}
+            onLoadTrack={(id) => {
+              const track = trackList.find((t) => t.id === id);
+              if (track) loadDeck("A", track);
+            }}
+            onSetSpeed={(speed) => updateDeck("A", { speed })}
+            onSetGain={(gain) => updateDeck("A", { gain })}
+            onSetFx={(patch) => updateDeck("A", patch)}
+            onTogglePlaying={() => updateDeck("A", { playing: !decks.A?.playing })}
+            onCut={() => cutDeck("A")}
+            onMakeMaster={() => {
+              clearCodeDraft();
+              setMaster("A");
+            }}
+            onSync={() => syncDeck("A")}
+          />
+        </div>
 
         <div className="crossfader-panel">
           <p className="master-bpm">{Math.round(masterBpm)} bpm (master: deck {master})</p>
@@ -437,26 +481,37 @@ export default function App() {
           </label>
         </div>
 
-        <Deck
-          label="deck B"
-          deck={decks.B}
-          tracks={trackList}
-          isMaster={master === "B"}
-          onLoadTrack={(id) => {
-            const track = trackList.find((t) => t.id === id);
+        <div
+          className="deck-drop-target"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const dragged = getTrackDragData(e);
+            const track = dragged && trackList.find((t) => t.id === dragged.id);
             if (track) loadDeck("B", track);
           }}
-          onSetSpeed={(speed) => updateDeck("B", { speed })}
-          onSetGain={(gain) => updateDeck("B", { gain })}
-          onSetFx={(patch) => updateDeck("B", patch)}
-          onTogglePlaying={() => updateDeck("B", { playing: !decks.B?.playing })}
-          onCut={() => cutDeck("B")}
-          onMakeMaster={() => {
-            clearCodeDraft();
-            setMaster("B");
-          }}
-          onSync={() => syncDeck("B")}
-        />
+        >
+          <Deck
+            label="deck B"
+            deck={decks.B}
+            tracks={trackList}
+            isMaster={master === "B"}
+            onLoadTrack={(id) => {
+              const track = trackList.find((t) => t.id === id);
+              if (track) loadDeck("B", track);
+            }}
+            onSetSpeed={(speed) => updateDeck("B", { speed })}
+            onSetGain={(gain) => updateDeck("B", { gain })}
+            onSetFx={(patch) => updateDeck("B", patch)}
+            onTogglePlaying={() => updateDeck("B", { playing: !decks.B?.playing })}
+            onCut={() => cutDeck("B")}
+            onMakeMaster={() => {
+              clearCodeDraft();
+              setMaster("B");
+            }}
+            onSync={() => syncDeck("B")}
+          />
+        </div>
       </div>
 
       <section className="code-section">

@@ -39,4 +39,10 @@ export const env = {
   // the old Valkey cache's sliding "refreshed on every play" TTL, which object storage
   // has no equivalent hook for.
   sampleTtlDays: Number(process.env.SAMPLE_TTL_DAYS ?? 1),
+
+  // Stem separation (see routes/stems.ts) — the dedicated Spleeter service, local
+  // docker-compose by default. Internal-only: nothing outside this gateway ever needs to
+  // reach it directly, so unlike S3_* above there's no "point this at a managed provider
+  // instead" story — Spleeter has no hosted equivalent, this is always self-run.
+  spleeterUrl: process.env.SPLEETER_URL ?? "http://spleeter:8100",
 };

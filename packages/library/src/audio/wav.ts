@@ -68,6 +68,33 @@ export function sliceToFile(buffer: AudioBuffer, startSec: number, endSec: numbe
 }
 
 /**
+ * Resamples `buffer` to `rate`× its original speed — plain linear interpolation, no
+ * dependency, same "good enough starting point" spirit analyze.ts's onset/tempo guessing
+ * already uses. Speed and pitch move together here (`rate` > 1 is faster *and* higher-
+ * pitched, exactly like speeding up a physical tape or turntable) — true pitch-corrected
+ * time-stretching needs a phase vocoder or similar, real DSP this doesn't attempt to be.
+ * `rate` <= 0 is rejected (nothing sane to render).
+ */
+export function resampleBuffer(buffer: AudioBuffer, rate: number): AudioBuffer {
+  if (!(rate > 0)) throw new Error("resampleBuffer: rate must be > 0");
+  const newLength = Math.max(1, Math.round(buffer.length / rate));
+  const out = new AudioBuffer({ numberOfChannels: buffer.numberOfChannels, length: newLength, sampleRate: buffer.sampleRate });
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const input = buffer.getChannelData(c);
+    const output = new Float32Array(newLength);
+    for (let i = 0; i < newLength; i++) {
+      const srcPos = i * rate;
+      const i0 = Math.floor(srcPos);
+      const i1 = Math.min(input.length - 1, i0 + 1);
+      const frac = srcPos - i0;
+      output[i] = (input[i0] ?? 0) * (1 - frac) + (input[i1] ?? 0) * frac;
+    }
+    out.copyToChannel(output, c);
+  }
+  return out;
+}
+
+/**
  * Concatenates several buffers end-to-end into one, for the "merge" side of the sample
  * editor — pick a couple of existing sounds, get back one loop-length buffer you can
  * scrub/chop like any freshly-dropped beat. Assumes all inputs share a sample rate (true

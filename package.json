@@ -7,7 +7,7 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "bun run --filter @strudel-point/gateway build && bun run --filter @strudel-point/web build && bun run --filter @strudel-point/dj build && bun run --filter @strudel-point/pads build",
+    "build": "bun run --filter @strudel-point/gateway build && bun run --filter @strudel-point/web build && bun run --filter @strudel-point/dj build && bun run --filter @strudel-point/pads build && bun run --filter @strudel-point/patch-panel build",
     "migrate": "bun scripts/migrate.mjs"
   },
   "devDependencies": {

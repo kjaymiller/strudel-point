@@ -31,4 +31,33 @@ declare module "@strudel/web" {
    * App.tsx. Returns 0 before anything has ever played.
    */
   export function getTime(): number;
+
+  export interface SoundEntry {
+    onTrigger: unknown;
+    data?: {
+      type?: "sample" | "synth" | string;
+      tag?: string;
+      samples?: string[] | Record<string, string[]>;
+    };
+  }
+
+  /** nanostores `map()` store — the live registry of every registered sound name, same
+   * shape as apps/web/src/strudel-web.d.ts's copy (see strudel.ts's
+   * registerAllSamples/listRegisteredSounds). */
+  export const soundMap: {
+    get(): Record<string, SoundEntry>;
+    listen(cb: (value: Record<string, SoundEntry>) => void): () => void;
+    setKey(key: string, value: SoundEntry | undefined): void;
+  };
+
+  /** Directly schedules one sound through superdough's synth/sample engine, bypassing
+   * the pattern scheduler entirely — used here only for library-tray sound previews
+   * (see App.tsx's previewLibrarySound), never for deck playback itself. */
+  export function superdough(
+    value: Record<string, unknown>,
+    t: number,
+    hapDuration: number,
+    cps?: number,
+    cycle?: number,
+  ): Promise<unknown>;
 }

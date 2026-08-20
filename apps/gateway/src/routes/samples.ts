@@ -11,9 +11,12 @@ const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50MB — real object storage (MinI
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES } });
 
 // Strudel sample names end up as bare identifiers in code (s("myclap")) — keep them safe.
-const NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+// Exported for routes/stems.ts, which validates the same way before deriving per-stem names.
+export const NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
-function rowToSample(row: any): CustomSample {
+// Exported for routes/stems.ts — stem separation inserts custom_samples rows through the
+// exact same shape, so it reuses this mapper rather than drifting its own copy.
+export function rowToSample(row: any): CustomSample {
   return {
     id: row.id,
     channelId: row.channel_id,

@@ -1,15 +1,25 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { CustomSample } from "@strudel-point/shared";
+import { groupSampleBanks, playableName } from "@strudel-point/library";
+import { setSoundDragData } from "../sampleDnd";
+
+// Re-exported under its original name so App.tsx's existing `import { CustomSamples,
+// playableName } from "./components/CustomSamples"` keeps working unchanged — the real
+// implementation now lives in @strudel-point/library, shared by every strudel-point app.
+export { playableName };
 
 interface CustomSamplesProps {
   samples: CustomSample[];
   onUpload: (file: File, name: string) => void;
   onDelete: (sample: CustomSample) => void;
+  /** Single click on a sample: audition it in place — doesn't touch the editor or the loop. */
+  onPreview: (name: string) => void;
+  /** Double click on a sample: insert its name into the editor at the cursor. */
   onPick: (name: string) => void;
   onRenameBank: (oldName: string, newName: string) => void;
   /**
-   * Sends one or more existing sounds to the sample editor below (BeatAnalyzer, via its
-   * `loadFromSamples`) to be re-scrubbed/chopped, or — when more than one is passed —
+   * Sends one or more existing sounds to the sample editor below (@strudel-point/library's
+   * SampleEditor, via its `loadFromSamples`) to be re-scrubbed/chopped, or — when more than one is passed —
    * merged end-to-end first and then chopped. Never mutates `samples` itself; editing
    * always produces a new bank.
    */
@@ -24,18 +34,6 @@ export function suggestName(fileName: string): string {
 }
 
 /**
- * The string that's actually playable in Strudel. For a plain upload this is just its
- * `name`; for a slice of a BeatAnalyzer bank, Strudel only ever registers the *bank*
- * (`samples({ [bankName]: [...] })`, see registerAllSamples in App.tsx) — the slice's own
- * `name` is purely our internal storage key and was never registered as a sound on its
- * own, so `s(name)` for a bank slice does nothing. `bankName:bankIndex` is the one that
- * resolves.
- */
-export function playableName(s: CustomSample): string {
-  return s.bankName ? `${s.bankName}:${s.bankIndex}` : s.name;
-}
-
-/**
  * Click-to-edit rename control for a bank's shared name — the "parent dir" of its slices —
  * plus the collapse/expand toggle for that header, since they share the same row.
  */
@@ -45,12 +43,14 @@ function BankNameEditor({
   collapsed,
   onToggleCollapsed,
   onRename,
+  onDeleteBank,
 }: {
   bankName: string;
   sliceCount: number;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onRename: (newName: string) => void;
+  onDeleteBank: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(bankName);
@@ -71,6 +71,17 @@ function BankNameEditor({
           }}
         >
           rename
+        </button>
+        <button
+          className="secondary"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (window.confirm(`delete all ${sliceCount} sample(s) in "${bankName}"?`)) {
+              onDeleteBank();
+            }
+          }}
+        >
+          delete
         </button>
       </div>
     );
@@ -107,6 +118,7 @@ export function CustomSamples({
   samples,
   onUpload,
   onDelete,
+  onPreview,
   onPick,
   onRenameBank,
   onEditSamples,
@@ -147,20 +159,17 @@ export function CustomSamples({
     [onUpload],
   );
 
+  const handleDeleteBank = useCallback(
+    (slices: CustomSample[]) => {
+      for (const s of slices) onDelete(s);
+    },
+    [onDelete],
+  );
+
   // Group slices by bankName ("the parent dir") so a bank shows as one header + its
-  // slices, rather than N unrelated-looking rows repeating the same bank name.
-  const { banks, singles } = useMemo(() => {
-    const banks = new Map<string, CustomSample[]>();
-    const singles: CustomSample[] = [];
-    for (const s of samples) {
-      if (s.bankName) banks.set(s.bankName, [...(banks.get(s.bankName) ?? []), s]);
-      else singles.push(s);
-    }
-    for (const slices of banks.values()) {
-      slices.sort((a, b) => (a.bankIndex ?? 0) - (b.bankIndex ?? 0));
-    }
-    return { banks, singles };
-  }, [samples]);
+  // slices, rather than N unrelated-looking rows repeating the same bank name — the same
+  // grouping every strudel-point app now shares (see @strudel-point/library's banks.ts).
+  const { banks, singles } = useMemo(() => groupSampleBanks(samples), [samples]);
 
   return (
     <div>
@@ -217,7 +226,7 @@ export function CustomSamples({
         </div>
       )}
 
-      {[...banks.entries()].map(([bankName, slices]) => {
+      {banks.map(({ bankName, slices }) => {
         const collapsed = collapsedBanks.has(bankName);
         return (
         <div key={bankName} className="bank-group">
@@ -227,12 +236,18 @@ export function CustomSamples({
             collapsed={collapsed}
             onToggleCollapsed={() => toggleBankCollapsed(bankName)}
             onRename={(newName) => onRenameBank(bankName, newName)}
+            onDeleteBank={() => handleDeleteBank(slices)}
           />
           {!collapsed && slices.map((s) => (
             <div
               key={s.id}
               className="track custom-sample bank-slice"
-              onClick={() => onPick(playableName(s))}
+              onClick={() => onPreview(playableName(s))}
+              onDoubleClick={() => onPick(playableName(s))}
+              draggable
+              onDragStart={(e) =>
+                setSoundDragData(e, { name: playableName(s), url: s.url, label: playableName(s) })
+              }
             >
               <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                 <input
@@ -278,7 +293,16 @@ export function CustomSamples({
       })}
 
       {singles.map((s) => (
-        <div key={s.id} className="track custom-sample" onClick={() => onPick(playableName(s))}>
+        <div
+          key={s.id}
+          className="track custom-sample"
+          onClick={() => onPreview(playableName(s))}
+          onDoubleClick={() => onPick(playableName(s))}
+          draggable
+          onDragStart={(e) =>
+            setSoundDragData(e, { name: playableName(s), url: s.url, label: playableName(s) })
+          }
+        >
           <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
             <input
               type="checkbox"

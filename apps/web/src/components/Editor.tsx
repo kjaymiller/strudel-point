@@ -12,6 +12,7 @@ import {
   type SliderWidgetConfig,
 } from "@strudel/codemirror/slider.mjs";
 import { installKnobDecorations } from "../knobs";
+import { getSoundDragData } from "../sampleDnd";
 
 export type { SliderWidgetConfig };
 
@@ -164,5 +165,29 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <div ref={containerRef} className="cm-container" />;
+  return (
+    <div
+      ref={containerRef}
+      className="cm-container"
+      onDragOver={(e) => {
+        if (getSoundDragData(e) || e.dataTransfer.types.includes("text/plain")) {
+          e.preventDefault();
+        }
+      }}
+      onDrop={(e) => {
+        const payload = getSoundDragData(e);
+        const name = payload?.name ?? e.dataTransfer.getData("text/plain");
+        if (!name) return;
+        e.preventDefault();
+        const view = viewRef.current;
+        if (!view) return;
+        const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }) ?? view.state.selection.main.from;
+        view.dispatch({
+          changes: { from: pos, to: pos, insert: name },
+          selection: { anchor: pos + name.length },
+        });
+        view.focus();
+      }}
+    />
+  );
 });

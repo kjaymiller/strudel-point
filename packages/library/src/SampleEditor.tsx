@@ -1,12 +1,4 @@
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { CustomSample } from "@strudel-point/shared";
 import {
   analyzeBeat,
@@ -15,17 +7,18 @@ import {
   decodeAudioUrl,
   recomputeCuts,
   type BeatAnalysis,
-} from "../audio/analyze";
-import { concatAudioBuffers, sliceToFile } from "../audio/wav";
-import { suggestName } from "./CustomSamples";
+} from "./audio/analyze";
+import { concatAudioBuffers, resampleBuffer, sliceToFile } from "./audio/wav";
+import { suggestName } from "./banks";
+import { getSoundDragData } from "./dnd";
 
-/** One existing sound to pull back into the editor — see `BeatAnalyzerHandle.loadFromSamples`. */
+/** One existing sound to pull back into the editor — see `SampleEditorHandle.loadFromSamples`. */
 export interface EditSource {
   url: string;
   label: string;
 }
 
-export interface BeatAnalyzerHandle {
+export interface SampleEditorHandle {
   /**
    * Loads one or more existing "my sounds" entries into the editor, in place of dropping a
    * fresh file. A single source is "re-scrub/re-chop this sample"; several are concatenated
@@ -34,11 +27,23 @@ export interface BeatAnalyzerHandle {
   loadFromSamples: (sources: EditSource[]) => void;
 }
 
-interface BeatAnalyzerProps {
+export interface StemResult {
+  name: string;
+  url: string;
+}
+
+interface SampleEditorProps {
   /** Uploads one slice (already a "name" of its own) as part of `bankName`, at `bankIndex`. */
   onUploadSlice: (file: File, name: string, bankName: string, bankIndex: number) => Promise<CustomSample>;
   /** Renames the bank just uploaded (every slice moves to the new bankName server-side). */
   onRenameBank: (oldName: string, newName: string) => void;
+  /** Sends the currently-loaded (and possibly resampled) whole buffer off for stem
+   * separation — vocals/drums/bass/other, or whatever the backing service returns —
+   * `baseName` is the bank name field's current value, so results come back named
+   * consistently with everything else this editor produces. Optional: omitting this
+   * hides the "separate into stems" section entirely, since it needs a real backing
+   * service (see apps/spleeter) an app may not have wired up. */
+  onSeparateStems?: (file: File, baseName: string) => Promise<StemResult[]>;
 }
 
 type Stage = "idle" | "analyzing" | "ready" | "uploading" | "done";
@@ -201,15 +206,24 @@ function SliceTrimmer({
 
 /**
  * Drop a "beat" in — or pull one or more existing "my sounds" entries back in via
- * `loadFromSamples` (CustomSamples' "scrub/chop" and "merge" actions) — see its waveform
- * and a best guess at how many cycles it is and where the cuts should go, adjust to taste,
- * then cut + upload — nothing touches the network until "cut & upload" is pressed. All
- * resulting slices land in Postgres/Valkey under one bank name, so they play back as
+ * `loadFromSamples` (the library tray's "scrub/chop" and "merge" actions) — see its
+ * waveform and a best guess at how many cycles it is and where the cuts should go, adjust
+ * to taste, optionally resample the whole thing (speed/pitch move together — see
+ * audio/wav.ts's resampleBuffer) or send it off for stem separation, then cut + upload —
+ * nothing touches the network until "cut & upload" (or "separate into stems") is
+ * pressed. All resulting slices land under one bank name, so they play back as
  * s("name:0"), s("name:1"), etc. Editing/merging existing sounds never mutates them —
- * this always produces a new bank alongside the originals.
+ * this always produces a new bank alongside the originals. A bank's index 0 is always
+ * its whole, uncut loop (see ensureWholeUploaded) — pull that back in later (single- or
+ * multi-select "edit" from the library tray) as the base for a *longer* sample: merging
+ * it with itself or anything else just concatenates whatever's picked, so this is also
+ * how you go past a sample's own original length rather than only ever cutting within it.
+ *
+ * Was apps/web's BeatAnalyzer.tsx — moved here so every strudel-point app's library
+ * drawer gets the same editor, not just web's own standalone panel.
  */
-export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(function BeatAnalyzer(
-  { onUploadSlice, onRenameBank },
+export const SampleEditor = forwardRef<SampleEditorHandle, SampleEditorProps>(function SampleEditor(
+  { onUploadSlice, onRenameBank, onSeparateStems },
   ref,
 ) {
   const [stage, setStage] = useState<Stage>("idle");
@@ -231,6 +245,16 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
   );
   // Per-slice trim (clip-in/clip-out), keyed the same way as sliceStatus. Absent === untrimmed.
   const [clips, setClips] = useState<Map<string, Clip>>(new Map());
+  // Speed knob for resampleBuffer — 1 = untouched. Applying it replaces `buffer` with the
+  // resampled result and re-analyzes from scratch, same as any other buffer-changing step.
+  const [resampleRate, setResampleRate] = useState(1);
+  const [stemsState, setStemsState] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [stems, setStems] = useState<StemResult[]>([]);
+  // Whether the whole, uncut buffer has been uploaded yet as this bank's index 0 — see
+  // ensureWholeUploaded below. Tracked separately from sliceStatus (which is keyed by cut
+  // slice, and the whole buffer isn't one of those); reset alongside everything else in
+  // reset()/loadBuffer() whenever a genuinely new buffer comes in.
+  const [wholeUploaded, setWholeUploaded] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -259,10 +283,14 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
     setRenameValue("");
     setSliceStatus(new Map());
     setClips(new Map());
+    setResampleRate(1);
+    setStemsState("idle");
+    setStems([]);
+    setWholeUploaded(false);
   }, []);
 
   // Shared tail of "get a decoded buffer analyzed and onto the screen" — used whether it
-  // came from a file drop or from loadFromSamples pulling existing sounds back in.
+  // came from a file drop, loadFromSamples pulling existing sounds back in, or a resample.
   const loadBuffer = useCallback((decoded: AudioBuffer, suggestedName: string) => {
     const result = analyzeBeat(decoded);
     setBuffer(decoded);
@@ -271,6 +299,9 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
     setCuts(result.cuts);
     setBankName(suggestedName);
     setStage("ready");
+    setSliceStatus(new Map());
+    setClips(new Map());
+    setWholeUploaded(false);
   }, []);
 
   const handleFile = useCallback(
@@ -394,6 +425,37 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
     [buffer, getAudioCtx],
   );
 
+  // Applies the Speed knob to the whole loaded buffer, replacing it and starting a fresh
+  // analysis pass (new peaks, new tempo/cut guess) — any cuts/trims/upload progress so far
+  // are for the *old* buffer and wouldn't line up, so this intentionally resets them, same
+  // as loading a different source would.
+  const applyResample = useCallback(() => {
+    if (!buffer || resampleRate === 1) return;
+    try {
+      const resampled = resampleBuffer(buffer, resampleRate);
+      loadBuffer(resampled, `${bankName || "sample"}-${resampleRate}x`);
+      setResampleRate(1);
+    } catch (err) {
+      setError(`couldn't resample: ${err instanceof Error ? err.message : err}`);
+    }
+  }, [buffer, resampleRate, bankName, loadBuffer]);
+
+  const separateStems = useCallback(async () => {
+    if (!buffer || !onSeparateStems) return;
+    setStemsState("running");
+    setError(null);
+    try {
+      const name = bankName.trim() || "sample";
+      const file = sliceToFile(buffer, 0, buffer.duration, `${name}.wav`);
+      const result = await onSeparateStems(file, name);
+      setStems(result);
+      setStemsState("done");
+    } catch (err) {
+      setStemsState("error");
+      setError(`stem separation failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }, [buffer, bankName, onSeparateStems]);
+
   // Dragging a marker updates its time; markers can't cross their neighbors.
   const handlePointerMove = useCallback(
     (e: PointerEvent) => {
@@ -428,8 +490,26 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
     [handlePointerMove, stopDrag],
   );
 
+  // Uploads the whole, uncut buffer as this bank's index 0 the first time anything else
+  // in it gets uploaded — same "index 0 is always the full loop, cut slices start at 1"
+  // convention apps/pads' own drop-straight-onto-the-grid flow already established, kept
+  // here so the two paths agree and a bank you built through *this* editor can still be
+  // pulled back in whole later (see the library tray's multi-select "merge" and the
+  // lengthen-by-merging-with-itself workflow that depends on it existing at all). A
+  // no-op past the first call for the current buffer (see wholeUploaded/loadBuffer).
+  const ensureWholeUploaded = useCallback(
+    async (name: string) => {
+      if (!buffer || wholeUploaded) return;
+      const file = sliceToFile(buffer, 0, buffer.duration, `${name}-0.wav`);
+      await onUploadSlice(file, `${name}-0`, name, 0);
+      setWholeUploaded(true);
+    },
+    [buffer, wholeUploaded, onUploadSlice],
+  );
+
   // Uploads one slice on its own — lets someone grab a single hit out of the bank without
-  // waiting on the rest, e.g. to re-cut just that one and re-upload it.
+  // waiting on the rest, e.g. to re-cut just that one and re-upload it. Cut slices land at
+  // index+1 (index 0 is reserved for the whole loop — see ensureWholeUploaded).
   const uploadOneSlice = useCallback(
     async (index: number) => {
       if (!buffer) return;
@@ -444,15 +524,17 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
       const eff = clippedRange(s, getClip(key));
       setSliceStatus((prev) => new Map(prev).set(key, "uploading"));
       try {
-        const file = sliceToFile(buffer, eff.start, eff.end, `${name}-${index}.wav`);
-        await onUploadSlice(file, `${name}-${index}`, name, index);
+        await ensureWholeUploaded(name);
+        const bankIndex = index + 1;
+        const file = sliceToFile(buffer, eff.start, eff.end, `${name}-${bankIndex}.wav`);
+        await onUploadSlice(file, `${name}-${bankIndex}`, name, bankIndex);
         setSliceStatus((prev) => new Map(prev).set(key, "done"));
       } catch (err) {
         setSliceStatus((prev) => new Map(prev).set(key, "error"));
         setError(`upload failed: ${err instanceof Error ? err.message : err}`);
       }
     },
-    [buffer, bankName, slices, getClip, onUploadSlice],
+    [buffer, bankName, slices, getClip, onUploadSlice, ensureWholeUploaded],
   );
 
   const handleUpload = useCallback(async () => {
@@ -465,35 +547,42 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
     setError(null);
     setStage("uploading");
     const pending = slices.filter((s) => sliceStatus.get(sliceKey(s)) !== "done");
-    setProgress({ done: slices.length - pending.length, total: slices.length });
+    // +1 for the whole-loop upload (index 0) alongside every cut slice — skipped from the
+    // total, same as an already-done slice, once ensureWholeUploaded has already run.
+    const total = pending.length + (wholeUploaded ? 0 : 1);
+    setProgress({ done: 0, total });
     try {
+      await ensureWholeUploaded(name);
+      if (!wholeUploaded) setProgress((p) => ({ ...p, done: p.done + 1 }));
       // Sequential, not parallel — keeps upload order (and therefore bank index) deterministic,
       // and each slice is small enough that this isn't a meaningful latency hit. Slices already
-      // uploaded individually (see uploadOneSlice) are skipped rather than re-sent.
+      // uploaded individually (see uploadOneSlice) are skipped rather than re-sent. Cut slices
+      // land at i+1 — index 0 is the whole loop just uploaded above.
       for (let i = 0; i < slices.length; i++) {
         const s = slices[i];
         const key = sliceKey(s);
         if (sliceStatus.get(key) === "done") continue;
         setSliceStatus((prev) => new Map(prev).set(key, "uploading"));
         const eff = clippedRange(s, getClip(key));
-        const file = sliceToFile(buffer, eff.start, eff.end, `${name}-${i}.wav`);
-        await onUploadSlice(file, `${name}-${i}`, name, i);
+        const bankIndex = i + 1;
+        const file = sliceToFile(buffer, eff.start, eff.end, `${name}-${bankIndex}.wav`);
+        await onUploadSlice(file, `${name}-${bankIndex}`, name, bankIndex);
         setSliceStatus((prev) => new Map(prev).set(key, "done"));
-        setProgress((p) => ({ done: p.done + 1, total: slices.length }));
+        setProgress((p) => ({ ...p, done: p.done + 1 }));
       }
-      setUploadedBank({ name, count: slices.length });
+      setUploadedBank({ name, count: slices.length + 1 });
       setRenameValue(name);
       setStage("done");
     } catch (err) {
       setError(`upload failed: ${err instanceof Error ? err.message : err}`);
       setStage("ready");
     }
-  }, [buffer, analysis, bankName, slices, sliceStatus, getClip, onUploadSlice]);
+  }, [buffer, analysis, bankName, slices, sliceStatus, getClip, onUploadSlice, ensureWholeUploaded, wholeUploaded]);
 
   if (stage === "idle" || stage === "analyzing") {
     return (
-      <div>
-        {error && <p style={{ color: "#ff9b9b", fontSize: 12 }}>{error}</p>}
+      <div className="sample-editor">
+        {error && <p className="sample-editor-error">{error}</p>}
         <div
           className={`dropzone ${dragOver ? "dragover" : ""}`}
           onClick={() => inputRef.current?.click()}
@@ -505,10 +594,17 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
+            const sound = getSoundDragData(e);
+            if (sound?.url) {
+              loadFromSamples([{ url: sound.url, label: sound.label ?? sound.name }]);
+              return;
+            }
             handleFile(e.dataTransfer.files?.[0]);
           }}
         >
-          {stage === "analyzing" ? `analyzing ${fileName}…` : "drop a beat here (or click to browse)"}
+          {stage === "analyzing"
+            ? `analyzing ${fileName}…`
+            : "drop a beat here, or drag an existing sound in from the library above (or click to browse)"}
         </div>
         <input
           ref={inputRef}
@@ -520,27 +616,37 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
             e.target.value = "";
           }}
         />
-        <p style={{ color: "var(--muted)", fontSize: 12 }}>
+        <p className="sample-editor-hint">
           analyzes a loop's waveform, guesses its tempo/cycle count and where the cycle
           boundaries fall, and only uploads once you confirm the cuts — all slices land in one
-          sound bank (s("name:0"), s("name:1"), …). you can also send an existing sound (or a
-          few, merged) here with "scrub/chop" below.
+          sound bank (s("name:0"), s("name:1"), …).
         </p>
       </div>
     );
   }
 
   return (
-    <div>
-      {error && <p style={{ color: "#ff9b9b", fontSize: 12 }}>{error}</p>}
+    <div
+      className="sample-editor"
+      onDragOver={(e) => {
+        if (getSoundDragData(e)?.url) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        const sound = getSoundDragData(e);
+        if (!sound?.url) return;
+        e.preventDefault();
+        loadFromSamples([{ url: sound.url, label: sound.label ?? sound.name }]);
+      }}
+    >
+      {error && <p className="sample-editor-error">{error}</p>}
 
       {analysis && (
         <>
-          <p style={{ fontSize: 12, color: "var(--muted)" }}>
+          <p className="sample-editor-meta">
             {fileName} · {formatTime(analysis.duration)} · ~{Math.round(analysis.bpm)} bpm
           </p>
 
-          <div ref={containerRef} style={{ position: "relative", marginBottom: 8 }}>
+          <div ref={containerRef} className="sample-editor-waveform">
             <canvas ref={canvasRef} style={{ width: "100%", height: CANVAS_HEIGHT, display: "block" }} />
             {cuts.map((t, i) => (
               <div
@@ -550,22 +656,14 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
                   startDrag(i);
                 }}
                 title={formatTime(t)}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  bottom: 0,
-                  left: `${(t / analysis.duration) * 100}%`,
-                  width: 6,
-                  marginLeft: -3,
-                  background: "rgba(255,255,255,0.5)",
-                  cursor: "ew-resize",
-                }}
+                className="sample-editor-cut-marker"
+                style={{ left: `${(t / analysis.duration) * 100}%` }}
               />
             ))}
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <label style={{ fontSize: 12, color: "var(--muted)" }}>cycles</label>
+          <div className="sample-editor-cycles-row">
+            <label className="knob-label">cycles</label>
             <input
               type="number"
               min={1}
@@ -589,7 +687,40 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
             </button>
           </div>
 
-          <div style={{ marginBottom: 10 }}>
+          <div className="sample-editor-resample-row">
+            <label className="knob-label">speed</label>
+            <input
+              type="number"
+              min={0.1}
+              max={4}
+              step={0.05}
+              value={resampleRate}
+              onChange={(e) => setResampleRate(Math.max(0.1, Math.min(4, Number(e.target.value) || 1)))}
+              style={{ width: 64 }}
+              disabled={stage !== "ready"}
+            />
+            <button className="secondary" disabled={stage !== "ready" || resampleRate === 1} onClick={applyResample}>
+              resample
+            </button>
+            <span className="sample-editor-hint" style={{ margin: 0 }}>
+              (speed and pitch move together — this isn't pitch-corrected time-stretching)
+            </span>
+          </div>
+
+          {onSeparateStems && (
+            <div className="sample-editor-stems-row">
+              <button className="secondary" disabled={stemsState === "running"} onClick={separateStems}>
+                {stemsState === "running" ? "separating…" : "separate into stems"}
+              </button>
+              {stemsState === "done" && (
+                <span className="sample-editor-hint" style={{ margin: 0 }}>
+                  ✓ {stems.length} stem{stems.length === 1 ? "" : "s"} added — {stems.map((s) => s.name).join(", ")}
+                </span>
+              )}
+            </div>
+          )}
+
+          <div className="sample-editor-slices">
             {slices.map((s, i) => {
               const key = sliceKey(s);
               const status = sliceStatus.get(key);
@@ -597,11 +728,11 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
               const eff = clippedRange(s, clip);
               const tooShortToSplit = eff.end - eff.start < MIN_SLICE_SECONDS * 2;
               return (
-                <div key={key} className="track" style={{ cursor: "default" }}>
+                <div key={key} className="track sample-editor-slice">
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <SliceTrimmer buffer={buffer!} slice={s} clip={clip} onChange={(c) => setClip(key, c)} />
                     <span style={{ fontSize: 12, flex: 1 }}>
-                      {bankName || "sample"}:{i} · {formatTime(eff.end - eff.start)}
+                      {bankName || "sample"}:{i + 1} · {formatTime(eff.end - eff.start)}
                     </span>
                   </div>
                   <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
@@ -629,7 +760,7 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
                       className="secondary"
                       disabled={status === "uploading" || stage === "uploading"}
                       onClick={() => uploadOneSlice(i)}
-                      title={`upload just this slice as ${bankName || "sample"}:${i}`}
+                      title={`upload just this slice as ${bankName || "sample"}:${i + 1}`}
                     >
                       {status === "done" ? "✓ uploaded" : status === "uploading" ? "uploading…" : "upload"}
                     </button>
@@ -653,9 +784,15 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
                   ? `uploading ${progress.done}/${progress.total}…`
                   : (() => {
                       const remaining = slices.filter((s) => sliceStatus.get(sliceKey(s)) !== "done").length;
-                      if (remaining === 0) return "finish bank";
-                      return remaining === slices.length
-                        ? `cut & upload ${slices.length} slice${slices.length === 1 ? "" : "s"}`
+                      if (remaining === 0 && wholeUploaded) return "finish bank";
+                      if (remaining === slices.length && !wholeUploaded) {
+                        // Nothing uploaded yet — this pass also uploads the whole loop as
+                        // index 0, so say so up front rather than surprising anyone with an
+                        // extra request.
+                        return `cut & upload ${slices.length} slice${slices.length === 1 ? "" : "s"} + full loop`;
+                      }
+                      return remaining === 0
+                        ? "upload full loop"
                         : `upload remaining ${remaining} slice${remaining === 1 ? "" : "s"}`;
                     })()}
               </button>
@@ -664,7 +801,7 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
 
           {stage === "done" && uploadedBank && (
             <>
-              <p style={{ fontSize: 12, color: "var(--accent)" }}>
+              <p className="sample-editor-done">
                 ✓ uploaded {uploadedBank.count} slices as "{uploadedBank.name}" — try{" "}
                 s("{uploadedBank.name}:0 {uploadedBank.name}:1")
               </p>
@@ -689,7 +826,7 @@ export const BeatAnalyzer = forwardRef<BeatAnalyzerHandle, BeatAnalyzerProps>(fu
                 </button>
               </div>
               <button className="secondary" onClick={reset}>
-                analyze another beat
+                edit another
               </button>
             </>
           )}

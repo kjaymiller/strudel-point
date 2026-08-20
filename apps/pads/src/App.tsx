@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChannelEvent, CreateTrackInput, CustomSample, StrudelJson, Track } from "@strudel-point/shared";
-import { getStrudel } from "./strudel";
+import {
+  groupSampleBanks,
+  LibraryDrawer,
+  requestStemSeparation,
+  playableName,
+  type RegisteredSound,
+  type StemResult,
+} from "@strudel-point/library";
+import { getStrudel, listRegisteredSounds } from "./strudel";
 import { useChannelSocket } from "./ws";
 import { decodeAudioFile, sliceToFile } from "./audio/beatcut";
 import {
@@ -65,26 +73,20 @@ async function jsonOrThrow(res: Response) {
   return res.json();
 }
 
-/** Groups a channel's custom samples into playable banks — same grouping apps/dj/src/App.tsx
- * uses, so a bank uploaded from either app (or the main editor's beat-analyzer) shows up
- * here identically. */
+/** Groups a channel's custom samples into playable banks — built on
+ * @strudel-point/library's groupSampleBanks (the same grouping every strudel-point app
+ * now shares), just reshaped into this app's own BankOption (PadGrid/SampleShelf's
+ * {bankName, slices, urls} — a standalone single becomes its own one-slice "bank" here,
+ * so both kinds of row can drag/drop through the identical pad-grid code path). */
 function groupBanks(samples: CustomSample[]): BankOption[] {
-  const groups = new Map<string, CustomSample[]>();
-  for (const s of samples) {
-    const key = s.bankName ?? s.name;
-    groups.set(key, [...(groups.get(key) ?? []), s]);
-  }
-  return [...groups.entries()]
-    .map(([bankName, list]) => {
-      const sorted = list.slice().sort((a, b) => (a.bankIndex ?? 0) - (b.bankIndex ?? 0));
-      const isBank = sorted[0].bankName !== undefined;
-      return {
-        bankName,
-        slices: sorted.map((s) => (isBank ? `${bankName}:${s.bankIndex}` : s.name)),
-        urls: sorted.map((s) => s.url),
-      };
-    })
-    .sort((a, b) => a.bankName.localeCompare(b.bankName));
+  const { banks, singles } = groupSampleBanks(samples);
+  const fromBanks = banks.map((b) => ({
+    bankName: b.bankName,
+    slices: b.slices.map((s) => `${b.bankName}:${s.bankIndex}`),
+    urls: b.slices.map((s) => s.url),
+  }));
+  const fromSingles = singles.map((s) => ({ bankName: s.name, slices: [s.name], urls: [s.url] }));
+  return [...fromBanks, ...fromSingles].sort((a, b) => a.bankName.localeCompare(b.bankName));
 }
 
 function navigateToChannel(channelId: string) {
@@ -115,6 +117,13 @@ export default function App() {
   const [username] = useState(ensureUsername);
   const [roomInput, setRoomInput] = useState(channelId);
   const [banks, setBanks] = useState<BankOption[]>([]);
+  // Raw (ungrouped) form of the same fetch `refreshBanks` already does, plus this room's
+  // saved Tracks and the live sound registry — the three things @strudel-point/library's
+  // <LibraryDrawer> renders. `banks` above stays the source PadGrid/SampleShelf actually
+  // drive; these are just reshaped/additional views onto the same data for the drawer.
+  const [rawCustomSamples, setRawCustomSamples] = useState<CustomSample[]>([]);
+  const [libraryTracks, setLibraryTracks] = useState<Track[]>([]);
+  const [registeredSounds, setRegisteredSounds] = useState<RegisteredSound[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [rackTitle, setRackTitle] = useState("");
   // This room's one rack Track, saved on demand (see saveRack below) rather than
@@ -250,6 +259,7 @@ export default function App() {
 
   const refreshBanks = useCallback(async () => {
     const samples: CustomSample[] = await fetch(`/api/channels/${channelId}/samples`).then(jsonOrThrow);
+    setRawCustomSamples(samples);
     const grouped = groupBanks(samples);
     setBanks(grouped);
     // Register every bank with Strudel as soon as we know about it, same reasoning as
@@ -257,6 +267,7 @@ export default function App() {
     // without anyone having dragged it onto a pad this session.
     const strudel = await getStrudel();
     await Promise.all(grouped.map((b) => strudel.samples({ [b.bankName]: b.urls })));
+    setRegisteredSounds(await listRegisteredSounds());
   }, [channelId]);
 
   const handleEvent = useCallback(
@@ -295,6 +306,15 @@ export default function App() {
       })
       .catch((err) => reportError(`couldn't load that track: ${err.message}`));
   }, [reportError]); // eslint-disable-line react-hooks/exhaustive-deps -- runs once, from the URL as loaded
+
+  // This room's saved Tracks, for @strudel-point/library's <LibraryDrawer> — new here
+  // (pads never browsed the full list before, only ever a single `?track=` load).
+  useEffect(() => {
+    fetch(`/api/channels/${channelId}/tracks`)
+      .then(jsonOrThrow)
+      .then(setLibraryTracks)
+      .catch((err) => reportError(`couldn't load saved tracks: ${err.message}`));
+  }, [channelId, reportError]);
 
   useEffect(() => {
     setRoomInput(channelId);
@@ -339,6 +359,24 @@ export default function App() {
       }
     },
     [refUrls, reportError],
+  );
+
+  // A simpler preview for @strudel-point/library's <LibraryDrawer> "all sounds" tab —
+  // that list spans built-in packs too, which have no fetchable `url` of their own for
+  // previewSample's manual decode path to use, so this just triggers superdough directly
+  // and lets it resolve the name against whatever's already registered.
+  const previewLibrarySound = useCallback(
+    (name: string) => {
+      // `name` may carry Strudel's "bank:index" mini-notation suffix (e.g. from a
+      // registered sample bank slice) — superdough looks up `s` as a literal registry
+      // key and never splits that suffix itself, so it has to be split here or the
+      // lookup misses even though the bank is loaded.
+      const { s, n } = parseSliceRef(name);
+      getStrudel()
+        .then((strudel) => strudel.superdough({ s, n }, strudel.getAudioContext().currentTime + 0.05, 0.5))
+        .catch((err) => reportError(`couldn't preview "${name}": ${err instanceof Error ? err.message : err}`));
+    },
+    [reportError],
   );
 
   // Press-and-hold on a bank's name (see SampleShelf) plays through its slices in
@@ -465,6 +503,41 @@ export default function App() {
       }
     },
     [uploadSlice, refreshBanks],
+  );
+
+  // Enables the shared library's "edit" tab (see @strudel-point/library's LibraryTray)
+  // to rename a bank the same way this app's own drop-and-cut flow creates one — the
+  // "bank:renamed" branch already wired into handleEvent above (it just calls
+  // refreshBanks()) picks the result up the same round trip every other client's does.
+  const renameBank = useCallback(
+    async (oldName: string, newName: string) => {
+      try {
+        await fetch(`/api/channels/${channelId}/banks/${encodeURIComponent(oldName)}/rename`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ newName }),
+        }).then(jsonOrThrow);
+        await refreshBanks();
+        send({ type: "bank:renamed", oldName, newName, samples: [] });
+      } catch (err) {
+        reportError(`couldn't rename "${oldName}": ${err instanceof Error ? err.message : err}`);
+      }
+    },
+    [channelId, send, refreshBanks, reportError],
+  );
+
+  // Feeds the sample editor's "separate into stems" button — the four resulting samples
+  // are already stored server-side by the time this resolves, so this only needs to
+  // announce them (refreshBanks picks them up the same way any other upload does) and
+  // hand back their playable names/urls for the editor's own success message.
+  const separateStems = useCallback(
+    async (file: File, baseName: string): Promise<StemResult[]> => {
+      const stems = await requestStemSeparation(channelId, file, baseName);
+      for (const sample of stems) send({ type: "sample:added", sample });
+      await refreshBanks();
+      return stems.map((s) => ({ name: playableName(s), url: s.url }));
+    },
+    [channelId, send, refreshBanks],
   );
 
   // Confirming a cut closes the review overlay immediately — uploading (all N slices, one
@@ -770,6 +843,22 @@ export default function App() {
           ■ hush
         </button>
       </header>
+
+      {/* The room's shared library, same drawer every strudel-point app renders (see
+          @strudel-point/library) — this room's saved Tracks plus every registered sound
+          (built-in packs + this room's own uploads, the latter already browsable via
+          SampleShelf below too, just without the built-ins). Sound chips drag the same
+          "text/plain" ref SampleShelf's own chips already do, so dropping one straight
+          onto a pad works with no changes to PadGrid at all. */}
+      <LibraryDrawer
+        tracks={libraryTracks}
+        customSamples={rawCustomSamples}
+        registeredSounds={registeredSounds}
+        onPreviewSound={previewLibrarySound}
+        onUploadSlice={uploadSlice}
+        onRenameBank={renameBank}
+        onSeparateStems={separateStems}
+      />
 
       {error && (
         <div className="error-banner">

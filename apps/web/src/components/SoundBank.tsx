@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { getSampleBufferForName } from "../strudel";
 import { analyzeLoopSeam, type LoopSeamAnalysis } from "../audio/loopSeam";
+import { setSoundDragData } from "../sampleDnd";
 
 export interface SoundBankEntry {
   name: string;
@@ -91,11 +92,19 @@ export function SoundBank({ sounds, onPreview, onAdd }: SoundBankProps) {
         {filtered.map((s) => {
           const seam = seams.get(s.name);
           return (
-            <div key={s.name} className="sound-chip" title={s.type}>
+            <div
+              key={s.name}
+              className="sound-chip"
+              title={s.type}
+              onDoubleClick={() => onAdd(s.name)}
+              draggable
+              onDragStart={(e) => setSoundDragData(e, { name: s.name, label: s.name })}
+            >
               <button
                 className="sound-chip-name"
                 onClick={() => onPreview(s.name)}
                 aria-label={`preview ${s.name}`}
+                title={`click to preview, double-click to add ${s.name} to the loop`}
               >
                 {s.name}
               </button>
