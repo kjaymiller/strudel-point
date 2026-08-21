@@ -1,6 +1,6 @@
+import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
 import { EnvelopePanel } from "./EnvelopePanel";
 import { ModuleHeader } from "./ModuleHeader";
-import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
 
 type EnvelopeInstance = Extract<ModuleInstance, { kind: "envelope" }>;
 
@@ -17,7 +17,13 @@ interface EnvelopeModuleCardProps {
 export function EnvelopeModuleCard({ module, onChange, onNameChange, onRemove }: EnvelopeModuleCardProps) {
   return (
     <section className="panel module-card">
-      <ModuleHeader kindLabel="Envelope (VCA)" name={module.name} onNameChange={onNameChange} colorId={module.id} onRemove={onRemove} />
+      <ModuleHeader
+        kindLabel="Envelope (VCA)"
+        name={module.name}
+        onNameChange={onNameChange}
+        colorId={module.id}
+        onRemove={onRemove}
+      />
       <EnvelopePanel
         moduleId={module.id}
         envelope={module.params}

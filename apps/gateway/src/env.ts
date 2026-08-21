@@ -1,5 +1,5 @@
-import { config as loadDotenv } from "dotenv";
 import path from "node:path";
+import { config as loadDotenv } from "dotenv";
 
 // Explicit path, not the default `dotenv/config` (which resolves relative to
 // process.cwd()) — the gateway container's CWD is /app (the bind-mounted repo root, so

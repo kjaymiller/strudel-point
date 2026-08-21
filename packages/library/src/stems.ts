@@ -23,9 +23,15 @@ async function jsonOrThrow(res: Response) {
  * CPU-bound ML inference), so show real loading state around this call rather than
  * assuming it returns quickly.
  */
-export async function requestStemSeparation(channelId: string, file: File, baseName: string): Promise<CustomSample[]> {
+export async function requestStemSeparation(
+  channelId: string,
+  file: File,
+  baseName: string,
+): Promise<CustomSample[]> {
   const form = new FormData();
   form.append("file", file);
   form.append("name", baseName);
-  return fetch(`/api/channels/${channelId}/samples/separate`, { method: "POST", body: form }).then(jsonOrThrow);
+  return fetch(`/api/channels/${channelId}/samples/separate`, { method: "POST", body: form }).then(
+    jsonOrThrow,
+  );
 }

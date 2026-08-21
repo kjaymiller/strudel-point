@@ -1,7 +1,7 @@
-import { Knob } from "./Knob";
-import { EnvelopePanel } from "./EnvelopePanel";
-import { ModuleHeader } from "./ModuleHeader";
 import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
+import { EnvelopePanel } from "./EnvelopePanel";
+import { Knob } from "./Knob";
+import { ModuleHeader } from "./ModuleHeader";
 
 type FilterEnvInstance = Extract<ModuleInstance, { kind: "filterenv" }>;
 
@@ -20,13 +20,27 @@ export function FilterEnvModuleCard({ module, onChange, onNameChange, onRemove }
   const p = module.params;
   return (
     <section className="panel module-card">
-      <ModuleHeader kindLabel="Filter env" name={module.name} onNameChange={onNameChange} colorId={module.id} onRemove={onRemove} />
+      <ModuleHeader
+        kindLabel="Filter env"
+        name={module.name}
+        onNameChange={onNameChange}
+        colorId={module.id}
+        onRemove={onRemove}
+      />
       <EnvelopePanel
         moduleId={module.id}
         envelope={p}
         onChange={(env) => onChange({ ...env, amount: p.amount })}
         extra={
-          <Knob label="Amount" value={p.amount} min={-8} max={8} step={0.1} unit="oct" onChange={(amount) => onChange({ ...p, amount })} />
+          <Knob
+            label="Amount"
+            value={p.amount}
+            min={-8}
+            max={8}
+            step={0.1}
+            unit="oct"
+            onChange={(amount) => onChange({ ...p, amount })}
+          />
         }
         cvOutJack={{
           address: jackAddress(module.id, "cutoff-mod-out"),

@@ -1,5 +1,5 @@
-import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 // Runs as the `dj` service in docker-compose.yml — a separate app from `web`, sharing the
 // same gateway (rooms/tracks/samples are all channelId-scoped, so both apps just point at

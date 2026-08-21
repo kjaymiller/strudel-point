@@ -1,5 +1,5 @@
-import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 // Runs as the `patch-panel` service in docker-compose.yml — a Novation-Peak-style
 // synth designer, sharing the same gateway as web/dj/pads (channelId-scoped rooms), so

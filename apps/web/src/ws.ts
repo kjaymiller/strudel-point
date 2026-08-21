@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChannelEvent, ClientMessage } from "@strudel-point/shared";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type JoinedAck = { type: "joined"; userId: string; channelId: string };
 type ErrorAck = { type: "error"; message: string };

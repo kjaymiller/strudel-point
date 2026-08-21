@@ -1,5 +1,5 @@
-import { Client as S3Client } from "minio";
 import { SpanStatusCode } from "@opentelemetry/api";
+import { Client as S3Client } from "minio";
 import { env } from "./env.js";
 import { tracer } from "./telemetry.js";
 

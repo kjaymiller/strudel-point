@@ -44,7 +44,12 @@ export function ModuleHeader({ kindLabel, name, onNameChange, colorId, onRemove 
       <span className="module-kind-label">{kindLabel}</span>
       <PanelColorSwatch panelId={colorId} />
       {onRemove && (
-        <button type="button" className="secondary module-remove" onClick={onRemove} title="remove this module">
+        <button
+          type="button"
+          className="secondary module-remove"
+          onClick={onRemove}
+          title="remove this module"
+        >
           ×
         </button>
       )}

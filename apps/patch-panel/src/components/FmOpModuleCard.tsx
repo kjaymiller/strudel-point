@@ -1,8 +1,8 @@
-import { Knob } from "./Knob";
+import { jackAddress, jackCapacity, type ModuleInstance, TONAL_WAVEFORMS } from "../modules";
 import { Jack } from "../PatchBay";
+import { Knob } from "./Knob";
 import { ModuleHeader } from "./ModuleHeader";
 import { waveformGlyph } from "./VcoModuleCard";
-import { jackAddress, jackCapacity, TONAL_WAVEFORMS, type ModuleInstance } from "../modules";
 
 type FmOpInstance = Extract<ModuleInstance, { kind: "fmop" }>;
 
@@ -30,10 +30,30 @@ export function FmOpModuleCard({ module, onChange, onNameChange, onRemove }: FmO
   const set = (patch: Partial<FmOpInstance["params"]>) => onChange({ ...p, ...patch });
   return (
     <section className="panel module-card">
-      <ModuleHeader kindLabel="FM operator" name={module.name} onNameChange={onNameChange} colorId={module.id} onRemove={onRemove} />
+      <ModuleHeader
+        kindLabel="FM operator"
+        name={module.name}
+        onNameChange={onNameChange}
+        colorId={module.id}
+        onRemove={onRemove}
+      />
       <div className="knob-row">
-        <Knob label="Index" value={p.index} min={0} max={20} step={0.1} onChange={(index) => set({ index })} />
-        <Knob label="Ratio" value={p.ratio} min={0.25} max={8} step={0.25} onChange={(ratio) => set({ ratio })} />
+        <Knob
+          label="Index"
+          value={p.index}
+          min={0}
+          max={20}
+          step={0.1}
+          onChange={(index) => set({ index })}
+        />
+        <Knob
+          label="Ratio"
+          value={p.ratio}
+          min={0.25}
+          max={8}
+          step={0.25}
+          onChange={(ratio) => set({ ratio })}
+        />
         <div className="waveform-select">
           <span className="knob-label">Wave</span>
           <div className="waveform-buttons">
@@ -50,16 +70,57 @@ export function FmOpModuleCard({ module, onChange, onNameChange, onRemove }: FmO
             ))}
           </div>
         </div>
-        <Knob label="Attack" value={p.attack} min={0} max={2} step={0.01} unit="s" onChange={(attack) => set({ attack })} />
-        <Knob label="Decay" value={p.decay} min={0} max={2} step={0.01} unit="s" onChange={(decay) => set({ decay })} />
-        <Knob label="Sustain" value={p.sustain} min={0} max={1} step={0.01} onChange={(sustain) => set({ sustain })} />
-        <Knob label="Release" value={p.release} min={0} max={2} step={0.01} unit="s" onChange={(release) => set({ release })} />
+        <Knob
+          label="Attack"
+          value={p.attack}
+          min={0}
+          max={2}
+          step={0.01}
+          unit="s"
+          onChange={(attack) => set({ attack })}
+        />
+        <Knob
+          label="Decay"
+          value={p.decay}
+          min={0}
+          max={2}
+          step={0.01}
+          unit="s"
+          onChange={(decay) => set({ decay })}
+        />
+        <Knob
+          label="Sustain"
+          value={p.sustain}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(sustain) => set({ sustain })}
+        />
+        <Knob
+          label="Release"
+          value={p.release}
+          min={0}
+          max={2}
+          step={0.01}
+          unit="s"
+          onChange={(release) => set({ release })}
+        />
         <div className="jack-slot">
-          <Jack address={jackAddress(module.id, "audio-in")} role="audio-in" capacity={jackCapacity("fmop", "audio-in")} label="audio in" />
+          <Jack
+            address={jackAddress(module.id, "audio-in")}
+            role="audio-in"
+            capacity={jackCapacity("fmop", "audio-in")}
+            label="audio in"
+          />
           <span className="jack-label">in</span>
         </div>
         <div className="jack-slot">
-          <Jack address={jackAddress(module.id, "audio-out")} role="audio-out" capacity={jackCapacity("fmop", "audio-out")} label="audio out" />
+          <Jack
+            address={jackAddress(module.id, "audio-out")}
+            role="audio-out"
+            capacity={jackCapacity("fmop", "audio-out")}
+            label="audio out"
+          />
           <span className="jack-label">out</span>
         </div>
       </div>

@@ -5,7 +5,7 @@
 // Registering a Counter always works, the /metrics route below always has something
 // to return, and prometheus.yml simply won't have anyone to scrape if this service
 // isn't running (same as any other scrape target).
-import { Counter, Registry, collectDefaultMetrics } from "prom-client";
+import { Counter, collectDefaultMetrics, Registry } from "prom-client";
 
 export const registry = new Registry();
 collectDefaultMetrics({ register: registry });

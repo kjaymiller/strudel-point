@@ -1,5 +1,5 @@
-import { Jack } from "../PatchBay";
 import { jackCapacity } from "../modules";
+import { Jack } from "../PatchBay";
 
 // No on-screen keyboard here (that's a future app) — mini-notation is the tool for
 // writing notes/arpeggios/chords without one. These are just ready-made examples of what
@@ -84,7 +84,12 @@ export function SequencePanel({
           </button>
         </div>
         <div className="jack-slot">
-          <Jack address={gateInAddress} role="gate-in" capacity={jackCapacity("sequencer", "gate-in")} label="trig in <- a signal gen's out" />
+          <Jack
+            address={gateInAddress}
+            role="gate-in"
+            capacity={jackCapacity("sequencer", "gate-in")}
+            label="trig in <- a signal gen's out"
+          />
           <span className="jack-label">trig in</span>
         </div>
       </div>
@@ -98,7 +103,11 @@ export function SequencePanel({
               placeholder='mini-notation, e.g. "c e g c5" or "<c e g>*4"'
               spellCheck={false}
               readOnly={sequenceIsGated}
-              title={sequenceIsGated ? "driven by a patched signal gen — unplug its cable to type your own" : undefined}
+              title={
+                sequenceIsGated
+                  ? "driven by a patched signal gen — unplug its cable to type your own"
+                  : undefined
+              }
             />
           </div>
           {!sequenceIsGated && (

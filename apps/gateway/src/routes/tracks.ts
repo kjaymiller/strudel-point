@@ -1,7 +1,7 @@
-import { Router } from "express";
 import type { CreateTrackInput, Track, UpdateTrackInput } from "@strudel-point/shared";
-import { pool } from "../db.js";
+import { Router } from "express";
 import { asyncHandler } from "../asyncHandler.js";
+import { pool } from "../db.js";
 
 export const tracksRouter = Router();
 
@@ -22,10 +22,9 @@ function rowToTrack(row: any): Track {
 tracksRouter.get(
   "/channels/:channelId/tracks",
   asyncHandler(async (req, res) => {
-    const { rows } = await pool.query(
-      `select * from tracks where channel_id = $1 order by created_at desc`,
-      [req.params.channelId],
-    );
+    const { rows } = await pool.query(`select * from tracks where channel_id = $1 order by created_at desc`, [
+      req.params.channelId,
+    ]);
     res.json(rows.map(rowToTrack));
   }),
 );
@@ -94,10 +93,10 @@ tracksRouter.put(
       return res.status(400).json({ error: "nothing to update" });
     }
 
-    const { rows } = await pool.query(
-      `update tracks set ${sets.join(", ")} where id = $1 returning *`,
-      [req.params.id, ...values],
-    );
+    const { rows } = await pool.query(`update tracks set ${sets.join(", ")} where id = $1 returning *`, [
+      req.params.id,
+      ...values,
+    ]);
     if (rows.length === 0) return res.status(404).json({ error: "not found" });
     res.json(rowToTrack(rows[0]));
   }),

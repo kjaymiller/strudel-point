@@ -17,7 +17,7 @@
 // against the true viewport edge in the same motion, so a closed drawer reserves no
 // visible space at all; open, the same transform resolves to zero and the panel sits at
 // the edge with the toggle right beside it, still reachable to close again.
-import { useState, type CSSProperties } from "react";
+import { type CSSProperties, useState } from "react";
 import { LibraryTray, type LibraryTrayProps } from "./LibraryTray";
 
 const PANEL_WIDTH = 320;
@@ -32,7 +32,12 @@ export interface LibraryDrawerProps extends LibraryTrayProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-export function LibraryDrawer({ side = "right", open: openProp, onOpenChange, ...trayProps }: LibraryDrawerProps) {
+export function LibraryDrawer({
+  side = "right",
+  open: openProp,
+  onOpenChange,
+  ...trayProps
+}: LibraryDrawerProps) {
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
   const setOpen = (next: boolean) => {
@@ -65,7 +70,12 @@ export function LibraryDrawer({ side = "right", open: openProp, onOpenChange, ..
         aria-expanded={open}
         aria-label={open ? "close library" : "open library"}
         title={open ? "close library" : "open library"}
-        style={{ pointerEvents: "auto", alignSelf: "flex-start", marginTop: 56, order: side === "right" ? 0 : 1 }}
+        style={{
+          pointerEvents: "auto",
+          alignSelf: "flex-start",
+          marginTop: 56,
+          order: side === "right" ? 0 : 1,
+        }}
       >
         {open ? (side === "right" ? "›" : "‹") : side === "right" ? "‹" : "›"} library
       </button>

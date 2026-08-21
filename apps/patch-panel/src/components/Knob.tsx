@@ -28,10 +28,13 @@ export function Knob({ label, value, min, max, step = 0.01, unit = "", onChange,
     [min, max, step],
   );
 
-  const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { startY: e.clientY, startValue: value };
-  }, [value]);
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      dragRef.current = { startY: e.clientY, startValue: value };
+    },
+    [value],
+  );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {

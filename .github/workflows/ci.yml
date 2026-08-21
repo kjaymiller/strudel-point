@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ts:
+    name: lint, typecheck, test (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun run typecheck
+      - run: bun run test
+
+  python:
+    name: lint (spleeter)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/spleeter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      # ruff is a static linter, not a spleeter runtime dependency — `uvx` runs it from
+      # an ephemeral environment so this doesn't need spleeter's own deps installed
+      # (tensorflow's pin has no wheel outside the Linux/Docker build target; see
+      # pyproject.toml's dependencies comment).
+      - run: uvx ruff@0.8.4 check .

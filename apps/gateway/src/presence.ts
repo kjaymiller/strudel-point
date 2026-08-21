@@ -1,6 +1,6 @@
 import type { PresencePeer } from "@strudel-point/shared";
-import { withValkey, isValkeyReady } from "./valkey.js";
 import { listRoomCounts, listRoomPeers } from "./rooms.js";
+import { isValkeyReady, withValkey } from "./valkey.js";
 
 // Presence is the one thing the Kafka fan-out design can't give us. Every gateway instance
 // consumes every event and broadcasts to its own sockets (see kafka.ts's per-instance

@@ -1,9 +1,9 @@
-import { Kafka, logLevel } from "kafkajs";
 import { SpanStatusCode } from "@opentelemetry/api";
 import { CHANNEL_EVENTS_TOPIC, type ChannelEvent } from "@strudel-point/shared";
+import { Kafka, logLevel } from "kafkajs";
 import { env } from "./env.js";
+import { kafkaErrorsTotal, kafkaMessagesConsumedTotal, kafkaMessagesPublishedTotal } from "./metrics.js";
 import { tracer } from "./telemetry.js";
-import { kafkaMessagesPublishedTotal, kafkaMessagesConsumedTotal, kafkaErrorsTotal } from "./metrics.js";
 
 // kafkajs's own pending-request scheduler occasionally computes a negative setTimeout
 // delay under Bun (a runtime clock-arithmetic quirk, not anything about our brokers or

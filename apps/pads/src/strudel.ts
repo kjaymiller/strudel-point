@@ -3,7 +3,10 @@
 // that just happen to talk to the same gateway/room). See apps/web/src/strudel.ts for the
 // long-form rationale on prebake/aliasBank ordering and the iOS resume() dance; unchanged
 // here because pads need exactly the same sample packs (dirt-samples + tidal drum
-// machines) available to resolve whatever bank names a room's custom samples used.
+// machines) available to resolve whatever bank names a room's custom samples used, plus
+// the same synth/zzfx/soundfont (GM instrument) registrations apps/web's own prebake
+// does — those are in-memory only, so there's no reason this app's <LibraryDrawer> "all
+// sounds" tab should show a narrower set than apps/web's own SoundBank does.
 let strudelModule: typeof import("@strudel/web") | null = null;
 
 export async function getStrudel() {
@@ -21,6 +24,11 @@ export async function getStrudel() {
             undefined,
             { tag: "tidal-drum-machines" },
           ),
+          strudelModule!.registerSynthSounds(),
+          strudelModule!.registerZZFXSounds(),
+          // Dynamic import: see apps/web/src/strudel.ts — @strudel/soundfonts reads
+          // `window` at import time, which blows up outside a real browser.
+          import("@strudel/soundfonts").then(({ registerSoundfonts }) => registerSoundfonts()),
         ]);
         await strudelModule!.aliasBank(
           "https://raw.githubusercontent.com/todepond/samples/main/tidal-drum-machines-alias.json",

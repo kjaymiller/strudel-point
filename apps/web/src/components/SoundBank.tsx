@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
-import { getSampleBufferForName } from "../strudel";
 import { analyzeLoopSeam, type LoopSeamAnalysis } from "../audio/loopSeam";
 import { setSoundDragData } from "../sampleDnd";
+import { getSampleBufferForName } from "../strudel";
 
 export interface SoundBankEntry {
   name: string;
@@ -61,9 +61,7 @@ export function SoundBank({ sounds, onPreview, onAdd }: SoundBankProps) {
     setSeams((prev) => new Map(prev).set(name, "checking"));
     try {
       const buffer = await getSampleBufferForName(name);
-      setSeams((prev) =>
-        new Map(prev).set(name, buffer ? analyzeLoopSeam(buffer) : "not-sample-based"),
-      );
+      setSeams((prev) => new Map(prev).set(name, buffer ? analyzeLoopSeam(buffer) : "not-sample-based"));
     } catch (err) {
       setSeams((prev) =>
         new Map(prev).set(name, { error: err instanceof Error ? err.message : String(err) }),
@@ -86,9 +84,7 @@ export function SoundBank({ sounds, onPreview, onAdd }: SoundBankProps) {
         onChange={(e) => setQuery(e.target.value)}
       />
       <div className="sound-bank-list">
-        {sounds.length === 0 && (
-          <p style={{ color: "var(--muted)", fontSize: 13 }}>loading sounds…</p>
-        )}
+        {sounds.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>loading sounds…</p>}
         {filtered.map((s) => {
           const seam = seams.get(s.name);
           return (

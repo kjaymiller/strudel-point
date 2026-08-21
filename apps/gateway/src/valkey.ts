@@ -1,8 +1,8 @@
-import { Valkey } from "iovalkey";
 import { SpanStatusCode } from "@opentelemetry/api";
+import { Valkey } from "iovalkey";
 import { env } from "./env.js";
-import { tracer } from "./telemetry.js";
 import { valkeyCommandsTotal, valkeyErrorsTotal } from "./metrics.js";
+import { tracer } from "./telemetry.js";
 
 // Valkey is back, but in a different role than the one it lost. It used to *hold* custom
 // sample audio — the only copy, which is why it had a 5MB cap and why losing it lost data;

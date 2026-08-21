@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChannelEvent, CreateTrackInput, CustomSample, StrudelJson, Track } from "@strudel-point/shared";
 import {
   groupSampleBanks,
   LibraryDrawer,
-  requestStemSeparation,
   playableName,
   type RegisteredSound,
+  requestStemSeparation,
   type StemResult,
 } from "@strudel-point/library";
-import { getStrudel, listRegisteredSounds } from "./strudel";
-import { useChannelSocket } from "./ws";
+import type { ChannelEvent, CreateTrackInput, CustomSample, StrudelJson, Track } from "@strudel-point/shared";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { decodeAudioFile, sliceToFile } from "./audio/beatcut";
 import {
   buildRackCode,
@@ -19,9 +17,11 @@ import {
   parseTrackBpm,
   type RecordedHit,
 } from "./chain";
-import { SampleShelf } from "./components/SampleShelf";
-import { PadGrid, PAD_COUNT, type PadGridHandle } from "./components/PadGrid";
 import { BeatCutter } from "./components/BeatCutter";
+import { PAD_COUNT, PadGrid, type PadGridHandle } from "./components/PadGrid";
+import { SampleShelf } from "./components/SampleShelf";
+import { getStrudel, listRegisteredSounds } from "./strudel";
+import { useChannelSocket } from "./ws";
 
 // Debounce for the pad-recording autosave (see the effect near stopRecording) — a take
 // only actually changes when you stop recording, so this mostly just guards against
@@ -191,7 +191,9 @@ export default function App() {
   useEffect(() => {
     recordedTrackRef.current = recordedTrack;
   }, [recordedTrack]);
-  const [recordAutosaveState, setRecordAutosaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [recordAutosaveState, setRecordAutosaveState] = useState<"idle" | "saving" | "saved" | "error">(
+    "idle",
+  );
   const recordAutosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAutosavedRecordRef = useRef<string | null>(null);
   // Bumped by "new pad track" to force the autosave effect below to re-fire even though
@@ -218,7 +220,11 @@ export default function App() {
     try {
       const strudel = await getStrudel();
       const ac = strudel.getAudioContext();
-      await strudel.superdough({ s: "white", decay: 0.05, gain: accented ? 1 : 0.55 }, ac.currentTime + 0.01, 0.05);
+      await strudel.superdough(
+        { s: "white", decay: 0.05, gain: accented ? 1 : 0.55 },
+        ac.currentTime + 0.01,
+        0.05,
+      );
     } catch {
       // see above — a dropped click isn't worth reportError-ing over
     }
@@ -281,7 +287,12 @@ export default function App() {
     [refreshBanks],
   );
 
-  const { connected, send } = useChannelSocket({ channelId, username, onEvent: handleEvent, onError: reportError });
+  const { connected, send } = useChannelSocket({
+    channelId,
+    username,
+    onEvent: handleEvent,
+    onError: reportError,
+  });
 
   useEffect(() => {
     const onHashChange = () => setChannelId(channelIdFromLocation());
@@ -374,7 +385,9 @@ export default function App() {
       const { s, n } = parseSliceRef(name);
       getStrudel()
         .then((strudel) => strudel.superdough({ s, n }, strudel.getAudioContext().currentTime + 0.05, 0.5))
-        .catch((err) => reportError(`couldn't preview "${name}": ${err instanceof Error ? err.message : err}`));
+        .catch((err) =>
+          reportError(`couldn't preview "${name}": ${err instanceof Error ? err.message : err}`),
+        );
     },
     [reportError],
   );
@@ -795,7 +808,13 @@ export default function App() {
         : await fetch("/api/tracks", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ channelId, title, author: username, code, strudelJson } satisfies CreateTrackInput),
+            body: JSON.stringify({
+              channelId,
+              title,
+              author: username,
+              code,
+              strudelJson,
+            } satisfies CreateTrackInput),
           }).then(jsonOrThrow);
       setSavedTrack(track);
       setAutosaveState("saved");
@@ -814,7 +833,9 @@ export default function App() {
     setAutosaveState("idle");
   }, []);
 
-  const shareUrl = savedTrack ? `${location.origin}${location.pathname}?track=${savedTrack.id}#${channelId}` : null;
+  const shareUrl = savedTrack
+    ? `${location.origin}${location.pathname}?track=${savedTrack.id}#${channelId}`
+    : null;
 
   return (
     <div className="pads-app">
@@ -835,8 +856,16 @@ export default function App() {
             go
           </button>
         </form>
-        <span className={`connection-dot ${connected ? "connected" : ""}`} title={connected ? "connected" : "disconnected"} />
-        <button className="secondary" onClick={playRack} disabled={!hasRackContent} title="play the current rack as a loop, for the whole room to hear">
+        <span
+          className={`connection-dot ${connected ? "connected" : ""}`}
+          title={connected ? "connected" : "disconnected"}
+        />
+        <button
+          className="secondary"
+          onClick={playRack}
+          disabled={!hasRackContent}
+          title="play the current rack as a loop, for the whole room to hear"
+        >
           ▶ play rack
         </button>
         <button className="secondary" onClick={hush}>
@@ -957,11 +986,11 @@ export default function App() {
       <section className="pad-section">
         <h2>pads</h2>
         <p className="hint">
-          drag a slice from the shelf onto a pad, then click it (or, for the first 16, its
-          key — 1234/qwer/asdf/zxcv) to fire it straight through. Drag a bank's name instead
-          (not one of its slices) onto the grid and it loads all {PAD_COUNT} pads at once —
-          slice 0 onto pad 1, slice 1 onto pad 2, and so on. Press & hold a bank's name in
-          the shelf to preview it in sequence without touching a pad at all.
+          drag a slice from the shelf onto a pad, then click it (or, for the first 16, its key —
+          1234/qwer/asdf/zxcv) to fire it straight through. Drag a bank's name instead (not one of its slices)
+          onto the grid and it loads all {PAD_COUNT} pads at once — slice 0 onto pad 1, slice 1 onto pad 2,
+          and so on. Press & hold a bank's name in the shelf to preview it in sequence without touching a pad
+          at all.
         </p>
         <SampleShelf
           banks={banks}
@@ -983,18 +1012,16 @@ export default function App() {
       <section className="record-section">
         <h2>record a performance</h2>
         <p className="hint">
-          record hits the pads land while you're pressing them and turn them into their own
-          Strudel track — every hit snapped to the nearest 16th note, two pads landing on the
-          same step stacked together, empty steps as rests. Individual pad hits still fire as
-          direct one-shots the whole time; recording only ever *observes* them. This room
-          keeps just one pad-recording track — every take after the first auto-saves over it —
-          until you press "new pad track" to start a fresh one. Hit record (or press
-          spacebar) and a 4-beat white-noise count-in plays first, accented on 1, so your
-          first hit has something to land on; the click keeps going through the take to keep
-          you on the grid. Toggle the metronome on its own any time to jam along without
-          recording anything. Stopping re-reads the bpm from how far apart your presses
-          actually landed (not just the number below) whenever there's enough of a take to
-          tell — the field updates to match, so the next count-in picks up the same tempo.
+          record hits the pads land while you're pressing them and turn them into their own Strudel track —
+          every hit snapped to the nearest 16th note, two pads landing on the same step stacked together,
+          empty steps as rests. Individual pad hits still fire as direct one-shots the whole time; recording
+          only ever *observes* them. This room keeps just one pad-recording track — every take after the first
+          auto-saves over it — until you press "new pad track" to start a fresh one. Hit record (or press
+          spacebar) and a 4-beat white-noise count-in plays first, accented on 1, so your first hit has
+          something to land on; the click keeps going through the take to keep you on the grid. Toggle the
+          metronome on its own any time to jam along without recording anything. Stopping re-reads the bpm
+          from how far apart your presses actually landed (not just the number below) whenever there's enough
+          of a take to tell — the field updates to match, so the next count-in picks up the same tempo.
         </p>
         <div className="record-controls">
           <label>
@@ -1016,7 +1043,12 @@ export default function App() {
             {metronomeOn ? "🔊 metronome" : "🔇 metronome"}
           </button>
           {!recording ? (
-            <button className="record-button" onClick={startRecording} disabled={countIn !== null} title="record (spacebar)">
+            <button
+              className="record-button"
+              onClick={startRecording}
+              disabled={countIn !== null}
+              title="record (spacebar)"
+            >
               {countIn !== null ? `counting in… ${countIn}` : "● record"}
             </button>
           ) : (
@@ -1024,7 +1056,11 @@ export default function App() {
               ■ stop
             </button>
           )}
-          {recording && <span className="record-hit-count">{hitCount} hit{hitCount === 1 ? "" : "s"} recorded…</span>}
+          {recording && (
+            <span className="record-hit-count">
+              {hitCount} hit{hitCount === 1 ? "" : "s"} recorded…
+            </span>
+          )}
         </div>
 
         {recordedCode && !recording && (
@@ -1040,7 +1076,11 @@ export default function App() {
               <button className="secondary" onClick={hush}>
                 ■ stop
               </button>
-              <input value={recordTitle} onChange={(e) => setRecordTitle(e.target.value)} placeholder="pad track title" />
+              <input
+                value={recordTitle}
+                onChange={(e) => setRecordTitle(e.target.value)}
+                placeholder="pad track title"
+              />
               <button className="secondary" onClick={startNewPadTrack} disabled={!recordedTrack}>
                 new pad track
               </button>
@@ -1064,12 +1104,11 @@ export default function App() {
       <section className="rack-save">
         <h2>this room's pad rack</h2>
         <p className="hint">
-          save the current rack — every filled pad in order, empty ones as rests — as a
-          Strudel track, playable from a URL with this room's name, from this app or the
-          main editor. Nothing gets saved just from filling/clearing pads; press "save rack"
-          whenever you actually want this layout kept. This room keeps just one rack track —
-          every save after the first updates that same one — until "new rack track" starts a
-          fresh one.
+          save the current rack — every filled pad in order, empty ones as rests — as a Strudel track,
+          playable from a URL with this room's name, from this app or the main editor. Nothing gets saved just
+          from filling/clearing pads; press "save rack" whenever you actually want this layout kept. This room
+          keeps just one rack track — every save after the first updates that same one — until "new rack
+          track" starts a fresh one.
         </p>
         <div className="save-set">
           <input value={rackTitle} onChange={(e) => setRackTitle(e.target.value)} placeholder="rack title" />

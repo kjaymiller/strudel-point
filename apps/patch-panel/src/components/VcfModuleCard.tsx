@@ -1,7 +1,7 @@
-import { Knob } from "./Knob";
-import { Jack } from "../PatchBay";
-import { ModuleHeader } from "./ModuleHeader";
 import { FILTER_TYPES, jackAddress, jackCapacity, type ModuleInstance } from "../modules";
+import { Jack } from "../PatchBay";
+import { Knob } from "./Knob";
+import { ModuleHeader } from "./ModuleHeader";
 
 type VcfInstance = Extract<ModuleInstance, { kind: "vcf" }>;
 
@@ -21,10 +21,21 @@ export function VcfModuleCard({ module, onChange, onNameChange, onRemove }: VcfM
   const set = (patch: Partial<VcfInstance["params"]>) => onChange({ ...p, ...patch });
   return (
     <section className="panel module-card">
-      <ModuleHeader kindLabel="VCF" name={module.name} onNameChange={onNameChange} colorId={module.id} onRemove={onRemove} />
+      <ModuleHeader
+        kindLabel="VCF"
+        name={module.name}
+        onNameChange={onNameChange}
+        colorId={module.id}
+        onRemove={onRemove}
+      />
       <div className="knob-row">
         <div className="jack-slot">
-          <Jack address={jackAddress(module.id, "audio-in")} role="audio-in" capacity={jackCapacity("vcf", "audio-in")} label="audio in" />
+          <Jack
+            address={jackAddress(module.id, "audio-in")}
+            role="audio-in"
+            capacity={jackCapacity("vcf", "audio-in")}
+            label="audio in"
+          />
           <span className="jack-label">in</span>
         </div>
         <div className="waveform-select">
@@ -42,9 +53,32 @@ export function VcfModuleCard({ module, onChange, onNameChange, onRemove }: VcfM
             ))}
           </div>
         </div>
-        <Knob label="Cutoff" value={p.cutoff} min={20} max={12000} step={10} unit="Hz" precision={0} onChange={(cutoff) => set({ cutoff })} />
-        <Knob label="Resonance" value={p.resonance} min={0} max={30} step={0.1} onChange={(resonance) => set({ resonance })} />
-        <Knob label="Drive" value={p.drive} min={0} max={4} step={0.05} onChange={(drive) => set({ drive })} />
+        <Knob
+          label="Cutoff"
+          value={p.cutoff}
+          min={20}
+          max={12000}
+          step={10}
+          unit="Hz"
+          precision={0}
+          onChange={(cutoff) => set({ cutoff })}
+        />
+        <Knob
+          label="Resonance"
+          value={p.resonance}
+          min={0}
+          max={30}
+          step={0.1}
+          onChange={(resonance) => set({ resonance })}
+        />
+        <Knob
+          label="Drive"
+          value={p.drive}
+          min={0}
+          max={4}
+          step={0.05}
+          onChange={(drive) => set({ drive })}
+        />
         <div className="jack-slot">
           <Jack
             address={jackAddress(module.id, "cutoff-mod-in")}
@@ -55,7 +89,12 @@ export function VcfModuleCard({ module, onChange, onNameChange, onRemove }: VcfM
           <span className="jack-label">cutoff mod</span>
         </div>
         <div className="jack-slot">
-          <Jack address={jackAddress(module.id, "audio-out")} role="audio-out" capacity={jackCapacity("vcf", "audio-out")} label="audio out" />
+          <Jack
+            address={jackAddress(module.id, "audio-out")}
+            role="audio-out"
+            capacity={jackCapacity("vcf", "audio-out")}
+            label="audio out"
+          />
           <span className="jack-label">out</span>
         </div>
       </div>

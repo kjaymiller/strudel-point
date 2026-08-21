@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getTrackDragData, LibraryDrawer, type RegisteredSound } from "@strudel-point/library";
 import type { ChannelEvent, CreateTrackInput, StrudelJson, Track } from "@strudel-point/shared";
-import { LibraryDrawer, getTrackDragData, type RegisteredSound } from "@strudel-point/library";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { buildLiveCode, buildSetCode, type DeckConfig, type Scene, splitTrackCode } from "./chain";
 import { Deck } from "./components/Deck";
-import { getStrudel, setCps, listRegisteredSounds } from "./strudel";
+import { getStrudel, listRegisteredSounds, setCps } from "./strudel";
 import { useChannelSocket } from "./ws";
-import { buildLiveCode, buildSetCode, splitTrackCode, type DeckConfig, type Scene } from "./chain";
 
 const EVAL_DEBOUNCE_MS = 120;
 // Longer than EVAL_DEBOUNCE_MS on purpose — the live pattern should hot-swap immediately on
@@ -95,7 +95,12 @@ export default function App() {
   // useChannelSocket still needs *something* here to receive eval/hush/etc.
   const handleEvent = useCallback((_event: ChannelEvent) => {}, []);
 
-  const { connected, send } = useChannelSocket({ channelId, username, onEvent: handleEvent, onError: reportError });
+  const { connected, send } = useChannelSocket({
+    channelId,
+    username,
+    onEvent: handleEvent,
+    onError: reportError,
+  });
 
   // Every sound this app's own Strudel module has registered — just the built-in packs
   // (see strudel.ts's own comment on why dj doesn't fetch/register custom samples) — for
@@ -105,7 +110,9 @@ export default function App() {
   useEffect(() => {
     listRegisteredSounds()
       .then(setRegisteredSounds)
-      .catch((err) => reportError(`couldn't read sound registry: ${err instanceof Error ? err.message : err}`));
+      .catch((err) =>
+        reportError(`couldn't read sound registry: ${err instanceof Error ? err.message : err}`),
+      );
   }, [reportError]);
 
   const previewLibrarySound = useCallback(
@@ -118,7 +125,9 @@ export default function App() {
       const hap = match ? { s: match[1], n: Number(match[2]) } : { s: name };
       getStrudel()
         .then((strudel) => strudel.superdough(hap, strudel.getAudioContext().currentTime + 0.05, 0.5))
-        .catch((err) => reportError(`couldn't preview "${name}": ${err instanceof Error ? err.message : err}`));
+        .catch((err) =>
+          reportError(`couldn't preview "${name}": ${err instanceof Error ? err.message : err}`),
+        );
     },
     [reportError],
   );
@@ -313,7 +322,13 @@ export default function App() {
           : await fetch("/api/tracks", {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ channelId, title, author: username, code, strudelJson } satisfies CreateTrackInput),
+              body: JSON.stringify({
+                channelId,
+                title,
+                author: username,
+                code,
+                strudelJson,
+              } satisfies CreateTrackInput),
             }).then(jsonOrThrow);
         lastAutosavedRef.current = signature;
         setSavedTrack(track);
@@ -379,7 +394,9 @@ export default function App() {
     [send, reportError, updateDeck],
   );
 
-  const shareUrl = savedTrack ? `${location.origin}${location.pathname}?track=${savedTrack.id}#${channelId}` : null;
+  const shareUrl = savedTrack
+    ? `${location.origin}${location.pathname}?track=${savedTrack.id}#${channelId}`
+    : null;
 
   return (
     <div className="dj-app">
@@ -400,7 +417,10 @@ export default function App() {
             go
           </button>
         </form>
-        <span className={`connection-dot ${connected ? "connected" : ""}`} title={connected ? "connected" : "disconnected"} />
+        <span
+          className={`connection-dot ${connected ? "connected" : ""}`}
+          title={connected ? "connected" : "disconnected"}
+        />
         <button className="secondary" onClick={hush}>
           ■ hush
         </button>
@@ -410,7 +430,11 @@ export default function App() {
           @strudel-point/library) — this room's saved Tracks (drag one onto either deck
           below to load it there — see the deck-drop-target wrappers) and this app's own
           registered sounds (built-in packs only, see strudel.ts). */}
-      <LibraryDrawer tracks={trackList} registeredSounds={registeredSounds} onPreviewSound={previewLibrarySound} />
+      <LibraryDrawer
+        tracks={trackList}
+        registeredSounds={registeredSounds}
+        onPreviewSound={previewLibrarySound}
+      />
 
       {error && (
         <div className="error-banner">
@@ -423,9 +447,7 @@ export default function App() {
 
       {loadedTrack && (
         <div className="loaded-track">
-          <span>
-            loaded set "{loadedTrack.title}" (from this room's saved tracks) —
-          </span>
+          <span>loaded set "{loadedTrack.title}" (from this room's saved tracks) —</span>
           <button onClick={playLoadedTrack}>▶ play this set</button>
         </div>
       )}
@@ -464,7 +486,9 @@ export default function App() {
         </div>
 
         <div className="crossfader-panel">
-          <p className="master-bpm">{Math.round(masterBpm)} bpm (master: deck {master})</p>
+          <p className="master-bpm">
+            {Math.round(masterBpm)} bpm (master: deck {master})
+          </p>
           <label className="deck-row deck-row--vertical">
             <span>A ← crossfader → B</span>
             <input
@@ -524,10 +548,9 @@ export default function App() {
         {showCode && (
           <>
             <p className="hint">
-              This is the actual Strudel driving the live mix right now — every knob above just
-              recompiles it. Edit it directly to push the mix further than the knobs expose;
-              touching any knob, deck, or the crossfader regenerates it from scratch and
-              discards the edit.
+              This is the actual Strudel driving the live mix right now — every knob above just recompiles it.
+              Edit it directly to push the mix further than the knobs expose; touching any knob, deck, or the
+              crossfader regenerates it from scratch and discards the edit.
             </p>
             <textarea
               className="code-editor"
@@ -548,11 +571,10 @@ export default function App() {
       <section className="set-builder">
         <h2>set chain</h2>
         <p className="hint">
-          "add scene" freezes the current mix (both decks, speeds, gains, crossfader) for a
-          given number of cycles into the chain below. The whole chain auto-saves as one
-          Strudel track — <code>arrange()</code> under the hood — playable from a URL with
-          this room's number, from this app or the main editor. No manual save needed: it
-          keeps itself up to date as you keep mixing.
+          "add scene" freezes the current mix (both decks, speeds, gains, crossfader) for a given number of
+          cycles into the chain below. The whole chain auto-saves as one Strudel track —{" "}
+          <code>arrange()</code> under the hood — playable from a URL with this room's number, from this app
+          or the main editor. No manual save needed: it keeps itself up to date as you keep mixing.
         </p>
 
         <div className="scene-controls">

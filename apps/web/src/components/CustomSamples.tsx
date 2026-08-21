@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import type { CustomSample } from "@strudel-point/shared";
 import { groupSampleBanks, playableName } from "@strudel-point/library";
+import type { CustomSample } from "@strudel-point/shared";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { setSoundDragData } from "../sampleDnd";
 
 // Re-exported under its original name so App.tsx's existing `import { CustomSamples,
@@ -27,10 +27,12 @@ interface CustomSamplesProps {
 }
 
 export function suggestName(fileName: string): string {
-  return fileName
-    .replace(/\.[^.]+$/, "")
-    .replace(/[^a-zA-Z0-9_-]/g, "-")
-    .slice(0, 64) || "sample";
+  return (
+    fileName
+      .replace(/\.[^.]+$/, "")
+      .replace(/[^a-zA-Z0-9_-]/g, "-")
+      .slice(0, 64) || "sample"
+  );
 }
 
 /**
@@ -200,9 +202,7 @@ export function CustomSamples({
           e.target.value = "";
         }}
       />
-      {samples.length === 0 && (
-        <p style={{ color: "var(--muted)", fontSize: 13 }}>no custom sounds yet</p>
-      )}
+      {samples.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>no custom sounds yet</p>}
 
       {selected.size > 0 && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 12 }}>
@@ -229,66 +229,67 @@ export function CustomSamples({
       {banks.map(({ bankName, slices }) => {
         const collapsed = collapsedBanks.has(bankName);
         return (
-        <div key={bankName} className="bank-group">
-          <BankNameEditor
-            bankName={bankName}
-            sliceCount={slices.length}
-            collapsed={collapsed}
-            onToggleCollapsed={() => toggleBankCollapsed(bankName)}
-            onRename={(newName) => onRenameBank(bankName, newName)}
-            onDeleteBank={() => handleDeleteBank(slices)}
-          />
-          {!collapsed && slices.map((s) => (
-            <div
-              key={s.id}
-              className="track custom-sample bank-slice"
-              onClick={() => onPreview(playableName(s))}
-              onDoubleClick={() => onPick(playableName(s))}
-              draggable
-              onDragStart={(e) =>
-                setSoundDragData(e, { name: playableName(s), url: s.url, label: playableName(s) })
-              }
-            >
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                <input
-                  type="checkbox"
-                  checked={selected.has(s.id)}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={() => toggleSelected(s.id)}
-                  style={{ marginTop: 3 }}
-                  title="select for merge/chop"
-                />
-                <div style={{ flex: 1 }}>
-                  <div className="title">{playableName(s)}</div>
-                  <div className="meta">
-                    {s.fileName} · {(s.sizeBytes / 1024).toFixed(0)}kb
+          <div key={bankName} className="bank-group">
+            <BankNameEditor
+              bankName={bankName}
+              sliceCount={slices.length}
+              collapsed={collapsed}
+              onToggleCollapsed={() => toggleBankCollapsed(bankName)}
+              onRename={(newName) => onRenameBank(bankName, newName)}
+              onDeleteBank={() => handleDeleteBank(slices)}
+            />
+            {!collapsed &&
+              slices.map((s) => (
+                <div
+                  key={s.id}
+                  className="track custom-sample bank-slice"
+                  onClick={() => onPreview(playableName(s))}
+                  onDoubleClick={() => onPick(playableName(s))}
+                  draggable
+                  onDragStart={(e) =>
+                    setSoundDragData(e, { name: playableName(s), url: s.url, label: playableName(s) })
+                  }
+                >
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(s.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleSelected(s.id)}
+                      style={{ marginTop: 3 }}
+                      title="select for merge/chop"
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div className="title">{playableName(s)}</div>
+                      <div className="meta">
+                        {s.fileName} · {(s.sizeBytes / 1024).toFixed(0)}kb
+                      </div>
+                    </div>
+                  </div>
+                  <div className="sample-actions">
+                    <button
+                      className="secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditSamples([s]);
+                      }}
+                      title="scrub & chop this sound into a new bank"
+                    >
+                      chop
+                    </button>
+                    <button
+                      className="secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(s);
+                      }}
+                    >
+                      delete
+                    </button>
                   </div>
                 </div>
-              </div>
-              <div className="sample-actions">
-                <button
-                  className="secondary"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditSamples([s]);
-                  }}
-                  title="scrub & chop this sound into a new bank"
-                >
-                  chop
-                </button>
-                <button
-                  className="secondary"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(s);
-                  }}
-                >
-                  delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+              ))}
+          </div>
         );
       })}
 

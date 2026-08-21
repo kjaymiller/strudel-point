@@ -1,8 +1,8 @@
+import type { CustomSample } from "@strudel-point/shared";
 import { Router } from "express";
 import multer from "multer";
-import type { CustomSample } from "@strudel-point/shared";
-import { pool } from "../db.js";
 import { asyncHandler } from "../asyncHandler.js";
+import { pool } from "../db.js";
 import { deleteSampleBytes, getSampleBytes, putSampleBytes, sampleExists } from "../storage.js";
 
 export const samplesRouter = Router();
@@ -69,18 +69,14 @@ samplesRouter.post(
     const name = (req.body?.name || "").trim();
     if (!file) return res.status(400).json({ error: "file is required" });
     if (!NAME_PATTERN.test(name)) {
-      return res
-        .status(400)
-        .json({ error: "name must be 1-64 characters of letters, numbers, _ or -" });
+      return res.status(400).json({ error: "name must be 1-64 characters of letters, numbers, _ or -" });
     }
 
     // Optional: this row is one slice of a bank (see BeatAnalyzer.tsx) — bankName follows
     // the same charset as name, bankIndex is its position (s("bankName:bankIndex")).
     const bankNameRaw = (req.body?.bankName || "").trim();
     if (bankNameRaw && !NAME_PATTERN.test(bankNameRaw)) {
-      return res
-        .status(400)
-        .json({ error: "bankName must be 1-64 characters of letters, numbers, _ or -" });
+      return res.status(400).json({ error: "bankName must be 1-64 characters of letters, numbers, _ or -" });
     }
     const bankName = bankNameRaw || null;
     const bankIndex = bankName === null ? null : Number.parseInt(req.body?.bankIndex, 10);
@@ -110,9 +106,7 @@ samplesRouter.post(
 samplesRouter.get(
   "/samples/:id/audio",
   asyncHandler(async (req, res) => {
-    const { rows } = await pool.query(`select mime_type from custom_samples where id = $1`, [
-      req.params.id,
-    ]);
+    const { rows } = await pool.query(`select mime_type from custom_samples where id = $1`, [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: "not found" });
 
     const data = await getSampleBytes(req.params.id);
@@ -120,9 +114,7 @@ samplesRouter.get(
       // Bucket lifecycle rule expired the object but the metadata row hadn't been swept
       // yet — clean it up now.
       await pool.query(`delete from custom_samples where id = $1`, [req.params.id]);
-      return res
-        .status(404)
-        .json({ error: "this sample expired after 24h — drop it in again" });
+      return res.status(404).json({ error: "this sample expired after 24h — drop it in again" });
     }
 
     res.setHeader("content-type", rows[0].mime_type);
@@ -141,9 +133,7 @@ samplesRouter.put(
     const { channelId, bankName: oldName } = req.params;
     const newName = (req.body?.newName || "").trim();
     if (!NAME_PATTERN.test(newName)) {
-      return res
-        .status(400)
-        .json({ error: "newName must be 1-64 characters of letters, numbers, _ or -" });
+      return res.status(400).json({ error: "newName must be 1-64 characters of letters, numbers, _ or -" });
     }
     if (newName === oldName) {
       const { rows } = await pool.query(
@@ -179,9 +169,7 @@ samplesRouter.put(
 samplesRouter.delete(
   "/samples/:id",
   asyncHandler(async (req, res) => {
-    const { rowCount } = await pool.query(`delete from custom_samples where id = $1`, [
-      req.params.id,
-    ]);
+    const { rowCount } = await pool.query(`delete from custom_samples where id = $1`, [req.params.id]);
     await deleteSampleBytes(req.params.id);
     if (rowCount === 0) return res.status(404).json({ error: "not found" });
     res.status(204).end();

@@ -1,7 +1,7 @@
-import { Knob } from "./Knob";
+import { jackAddress, jackCapacity, type ModuleInstance, WAVEFORMS } from "../modules";
 import { Jack } from "../PatchBay";
+import { Knob } from "./Knob";
 import { ModuleHeader } from "./ModuleHeader";
-import { jackAddress, jackCapacity, WAVEFORMS, type ModuleInstance } from "../modules";
 
 type VcoInstance = Extract<ModuleInstance, { kind: "vco" }>;
 
@@ -35,7 +35,13 @@ export function VcoModuleCard({ module, onChange, onNameChange, onRemove }: VcoM
   const set = (patch: Partial<VcoInstance["params"]>) => onChange({ ...p, ...patch });
   return (
     <section className="panel module-card">
-      <ModuleHeader kindLabel="VCO" name={module.name} onNameChange={onNameChange} colorId={module.id} onRemove={onRemove} />
+      <ModuleHeader
+        kindLabel="VCO"
+        name={module.name}
+        onNameChange={onNameChange}
+        colorId={module.id}
+        onRemove={onRemove}
+      />
       <div className="knob-row">
         <div className="waveform-select">
           <span className="knob-label">Wave</span>
@@ -53,9 +59,23 @@ export function VcoModuleCard({ module, onChange, onNameChange, onRemove }: VcoM
             ))}
           </div>
         </div>
-        <Knob label="Octave" value={p.octave} min={-2} max={2} step={1} onChange={(octave) => set({ octave })} />
+        <Knob
+          label="Octave"
+          value={p.octave}
+          min={-2}
+          max={2}
+          step={1}
+          onChange={(octave) => set({ octave })}
+        />
         <Knob label="Gain" value={p.gain} min={0} max={1.5} step={0.01} onChange={(gain) => set({ gain })} />
-        <Knob label="Density" value={p.density} min={0.001} max={1} step={0.001} onChange={(density) => set({ density })} />
+        <Knob
+          label="Density"
+          value={p.density}
+          min={0.001}
+          max={1}
+          step={0.001}
+          onChange={(density) => set({ density })}
+        />
         <div className="jack-slot">
           <Jack
             address={jackAddress(module.id, "in")}
@@ -66,7 +86,12 @@ export function VcoModuleCard({ module, onChange, onNameChange, onRemove }: VcoM
           <span className="jack-label">in</span>
         </div>
         <div className="jack-slot">
-          <Jack address={jackAddress(module.id, "audio-out")} role="audio-out" capacity={jackCapacity("vco", "audio-out")} label="audio out" />
+          <Jack
+            address={jackAddress(module.id, "audio-out")}
+            role="audio-out"
+            capacity={jackCapacity("vco", "audio-out")}
+            label="audio out"
+          />
           <span className="jack-label">out</span>
         </div>
       </div>

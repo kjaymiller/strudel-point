@@ -3,8 +3,15 @@
 // node_modules/.../superdough/superdough.mjs's lpMap/hpMap/bpMap and helpers.mjs's
 // pitch-envelope/vibrato params).
 import { sourcesTo } from "./cables";
+import {
+  type FilterType,
+  type FmOperatorParams,
+  jackAddress,
+  type ModPedalTarget,
+  type ModuleInstance,
+  moduleIdOfAddress,
+} from "./modules";
 import { eosPattern, gatesToPattern, gatesToSequenceText } from "./sequencer";
-import { jackAddress, moduleIdOfAddress, type FilterType, type FmOperatorParams, type ModPedalTarget, type ModuleInstance } from "./modules";
 
 /** superdough's per-filter-type param prefix, see the lpMap/hpMap/bpMap this mirrors. */
 const FILTER_PREFIX: Record<FilterType, string> = { lpf: "lp", hpf: "hp", bpf: "bp" };
@@ -94,7 +101,11 @@ const MIN_SIGGEN_RATE = 0.0625;
 /** A Filter LFO feeding `siggen`'s rate-mod-in, if any — reuses the generic Filter LFO
  * generator to modulate a Signal gen's clock speed instead of a filter's cutoff, same
  * "cable it wherever the role matches" reuse compatibleDestinationRoles already allows. */
-function rateLfoFeeding(siggen: Extract<ModuleInstance, { kind: "siggen" }>, modules: ModuleInstance[], cables: string[]) {
+function rateLfoFeeding(
+  siggen: Extract<ModuleInstance, { kind: "siggen" }>,
+  modules: ModuleInstance[],
+  cables: string[],
+) {
   return firstModulator(modules, cables, jackAddress(siggen.id, "rate-mod-in"), "filterlfo");
 }
 
@@ -103,7 +114,11 @@ function rateLfoFeeding(siggen: Extract<ModuleInstance, { kind: "siggen" }>, mod
  * (not a static multiplier) exactly like a filter LFO sweeping a VCF's cutoff. Undefined
  * (no modulation) when nothing's cabled to rate-mod-in, or the LFO itself is inert (rate
  * or depth at 0) — same "0 = no effect" convention every other modulator here follows. */
-function rateModExprFor(siggen: Extract<ModuleInstance, { kind: "siggen" }>, modules: ModuleInstance[], cables: string[]): string | undefined {
+function rateModExprFor(
+  siggen: Extract<ModuleInstance, { kind: "siggen" }>,
+  modules: ModuleInstance[],
+  cables: string[],
+): string | undefined {
   const lfo = rateLfoFeeding(siggen, modules, cables);
   if (!lfo || lfo.params.rate <= 0 || lfo.params.depth <= 0) return undefined;
   const base = siggen.params.rate;
@@ -161,7 +176,11 @@ function lfoSuffixFor(
  * show — in favor of the live `.fast(...)` suffix noteHeadFor/directGateFastSuffix append
  * after this gets wrapped in `note(...)`; this string alone is display-safe either way
  * (see SequencerModuleCard's read-only text field). */
-export function effectiveSequenceFor(sequencer: ModuleInstance, modules: ModuleInstance[], cables: string[]): string {
+export function effectiveSequenceFor(
+  sequencer: ModuleInstance,
+  modules: ModuleInstance[],
+  cables: string[],
+): string {
   if (sequencer.kind !== "sequencer") return "";
   const siggen = siggenFeeding(sequencer, modules, cables);
   if (siggen) {
@@ -176,7 +195,11 @@ export function effectiveSequenceFor(sequencer: ModuleInstance, modules: ModuleI
 /** The `.fast(...)` suffix to chain after a Sequencer-driven `note(...)` head when its
  * gate-in's Signal gen is itself rate-LFO'd (see rateModExprFor) — empty string
  * otherwise, so callers can always append this unconditionally. */
-function sequencerFastSuffix(sequencer: Extract<ModuleInstance, { kind: "sequencer" }>, modules: ModuleInstance[], cables: string[]): string {
+function sequencerFastSuffix(
+  sequencer: Extract<ModuleInstance, { kind: "sequencer" }>,
+  modules: ModuleInstance[],
+  cables: string[],
+): string {
   const siggen = siggenFeeding(sequencer, modules, cables);
   if (!siggen) return "";
   const rateMod = rateModExprFor(siggen, modules, cables);
@@ -186,8 +209,15 @@ function sequencerFastSuffix(sequencer: Extract<ModuleInstance, { kind: "sequenc
 /** Whether this Sequencer's typed `sequence` field is currently overridden by an external
  * clock (Signal gen or EOS) — drives the "text field disabled, showing what's actually
  * playing instead" state in SequencerModuleCard. */
-export function sequenceIsGatedFor(sequencer: ModuleInstance, modules: ModuleInstance[], cables: string[]): boolean {
-  return siggenFeeding(sequencer, modules, cables) !== undefined || eosFeeding(sequencer, modules, cables) !== undefined;
+export function sequenceIsGatedFor(
+  sequencer: ModuleInstance,
+  modules: ModuleInstance[],
+  cables: string[],
+): boolean {
+  return (
+    siggenFeeding(sequencer, modules, cables) !== undefined ||
+    eosFeeding(sequencer, modules, cables) !== undefined
+  );
 }
 
 /** A voice source's own gate input, read directly off its unified "in" jack (no
@@ -196,7 +226,11 @@ export function sequenceIsGatedFor(sequencer: ModuleInstance, modules: ModuleIns
  * has come up empty — a Sequencer's own pattern always takes priority when one's
  * actually cabled in, same as a real modular rig where the more specific/downstream
  * connection wins. */
-export function directGatePatternFor(source: ModuleInstance, modules: ModuleInstance[], cables: string[]): string | undefined {
+export function directGatePatternFor(
+  source: ModuleInstance,
+  modules: ModuleInstance[],
+  cables: string[],
+): string | undefined {
   if (!isVoiceSource(source)) return undefined;
   const siggen = siggenFeeding(source, modules, cables);
   if (siggen) {
@@ -211,7 +245,11 @@ export function directGatePatternFor(source: ModuleInstance, modules: ModuleInst
 /** The `.fast(...)` suffix to chain after a directly-gated voice source's `note(...)`
  * head when its own Signal gen is itself rate-LFO'd (see rateModExprFor) — empty string
  * otherwise. Mirrors sequencerFastSuffix for the "skip the Sequencer" direct-gate path. */
-function directGateFastSuffix(source: VoiceSourceInstance, modules: ModuleInstance[], cables: string[]): string {
+function directGateFastSuffix(
+  source: VoiceSourceInstance,
+  modules: ModuleInstance[],
+  cables: string[],
+): string {
   const siggen = siggenFeeding(source, modules, cables);
   if (!siggen) return "";
   const rateMod = rateModExprFor(siggen, modules, cables);
@@ -229,7 +267,11 @@ export function sequencerFeeding(source: ModuleInstance, modules: ModuleInstance
  * effectiveSequenceFor above, playMode deciding sequence-vs-hold). Only ever called once
  * sequencerFeeding has confirmed a Sequencer is actually cabled in — see voiceExpression,
  * which is what decides whether a voice source gets a note pattern at all. */
-function noteHeadFor(sequencer: Extract<ModuleInstance, { kind: "sequencer" }>, modules: ModuleInstance[], cables: string[]): string {
+function noteHeadFor(
+  sequencer: Extract<ModuleInstance, { kind: "sequencer" }>,
+  modules: ModuleInstance[],
+  cables: string[],
+): string {
   const sp = sequencer.params;
   if (sp.playMode === "hold") {
     const cycles = Number.isFinite(sp.holdCycles) && sp.holdCycles > 0 ? sp.holdCycles : 16;
@@ -350,7 +392,12 @@ function fmOperatorParts(op: FmOperatorParams, slot: number): string[] {
  * own — same deal. "fmop" is handled directly by expressionAt instead of here, since its
  * own contribution depends on its position in the chain (see fmOperatorParts) in a way
  * none of these other kinds need to. */
-function appendModuleChain(expr: string, mod: ModuleInstance, modules: ModuleInstance[], cables: string[]): string {
+function appendModuleChain(
+  expr: string,
+  mod: ModuleInstance,
+  modules: ModuleInstance[],
+  cables: string[],
+): string {
   const parts: string[] = [];
   if (mod.kind === "envelope") {
     const e = mod.params;
@@ -383,7 +430,11 @@ function appendModuleChain(expr: string, mod: ModuleInstance, modules: ModuleIns
   } else if (mod.kind === "delay") {
     const d = mod.params;
     if (d.send > 0) {
-      parts.push(`.delay(${round(d.send)})`, `.delaytime(${round(d.time)})`, `.delayfeedback(${round(d.feedback)})`);
+      parts.push(
+        `.delay(${round(d.send)})`,
+        `.delaytime(${round(d.time)})`,
+        `.delayfeedback(${round(d.feedback)})`,
+      );
     }
   } else if (mod.kind === "reverb") {
     const r = mod.params;
@@ -493,6 +544,8 @@ export function buildMixCode(modules: ModuleInstance[], cables: string[]): MixRe
   const output = modules.find((m) => m.kind === "output");
   const reachedSourceIds = new Set<string>();
   const result = output ? expressionAt(output.id, modules, cables, new Set(), reachedSourceIds) : null;
-  const unterminatedSourceIds = modules.filter((m) => isVoiceSource(m) && !reachedSourceIds.has(m.id)).map((m) => m.id);
+  const unterminatedSourceIds = modules
+    .filter((m) => isVoiceSource(m) && !reachedSourceIds.has(m.id))
+    .map((m) => m.id);
   return { code: result?.expr ?? "silence", unterminatedSourceIds };
 }

@@ -1,5 +1,5 @@
-import { WebSocket } from "ws";
 import type { PresencePeer } from "@strudel-point/shared";
+import { WebSocket } from "ws";
 import { wsMessagesSentTotal } from "./metrics.js";
 
 interface Client {

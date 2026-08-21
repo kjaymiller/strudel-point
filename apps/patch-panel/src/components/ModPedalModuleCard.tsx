@@ -1,7 +1,7 @@
-import { Knob } from "./Knob";
-import { Jack } from "../PatchBay";
-import { ModuleHeader } from "./ModuleHeader";
 import { jackAddress, LFO_SHAPES, MOD_PEDAL_TARGETS, type ModuleInstance } from "../modules";
+import { Jack } from "../PatchBay";
+import { Knob } from "./Knob";
+import { ModuleHeader } from "./ModuleHeader";
 
 type ModPedalInstance = Extract<ModuleInstance, { kind: "modpedal" }>;
 
@@ -33,7 +33,13 @@ export function ModPedalModuleCard({ module, onChange, onNameChange, onRemove }:
   const set = (patch: Partial<ModPedalInstance["params"]>) => onChange({ ...p, ...patch });
   return (
     <section className="panel module-card">
-      <ModuleHeader kindLabel="Mod pedal" name={module.name} onNameChange={onNameChange} colorId={module.id} onRemove={onRemove} />
+      <ModuleHeader
+        kindLabel="Mod pedal"
+        name={module.name}
+        onNameChange={onNameChange}
+        colorId={module.id}
+        onRemove={onRemove}
+      />
       <div className="knob-row">
         <div className="waveform-select">
           <span className="knob-label">Target</span>
@@ -51,8 +57,23 @@ export function ModPedalModuleCard({ module, onChange, onNameChange, onRemove }:
             ))}
           </div>
         </div>
-        <Knob label="Rate" value={p.rate} min={0} max={20} step={0.05} unit="Hz" onChange={(rate) => set({ rate })} />
-        <Knob label="Depth" value={p.depth} min={0} max={1} step={0.01} onChange={(depth) => set({ depth })} />
+        <Knob
+          label="Rate"
+          value={p.rate}
+          min={0}
+          max={20}
+          step={0.05}
+          unit="Hz"
+          onChange={(rate) => set({ rate })}
+        />
+        <Knob
+          label="Depth"
+          value={p.depth}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(depth) => set({ depth })}
+        />
         <div className="waveform-select">
           <span className="knob-label">Shape</span>
           <div className="waveform-buttons">
@@ -70,7 +91,12 @@ export function ModPedalModuleCard({ module, onChange, onNameChange, onRemove }:
           </div>
         </div>
         <div className="jack-slot">
-          <Jack address={jackAddress(module.id, "env-mod-out")} role="env-mod-out" capacity={Infinity} label="out -> an envelope module's mod in" />
+          <Jack
+            address={jackAddress(module.id, "env-mod-out")}
+            role="env-mod-out"
+            capacity={Infinity}
+            label="out -> an envelope module's mod in"
+          />
           <span className="jack-label">out</span>
         </div>
       </div>

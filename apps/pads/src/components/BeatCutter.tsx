@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { analyzeBeatCuts, boundsFromCuts, recomputeCuts, type BeatCut } from "../audio/beatcut";
+import { analyzeBeatCuts, type BeatCut, boundsFromCuts, recomputeCuts } from "../audio/beatcut";
 
 const CANVAS_HEIGHT = 100;
 const MIN_SLICE_SECONDS = 0.05;
@@ -182,9 +182,9 @@ export function BeatCutter({
       {error && <p style={{ color: "#ff9b9b", fontSize: 12 }}>{error}</p>}
       <p style={{ fontSize: 12, color: "var(--muted)" }}>
         {fileName} · {formatTime(analysis.duration)} · ~{Math.round(analysis.bpm)} bpm detected — check the
-        cycle count below if it ends up sounding too fast/slow once the pads are firing; a pad's implied
-        tempo (for anything that cares) is derived straight from how long each of these slices is. The
-        whole loop uploads too, as "{bankName || "sample"}:0" — the slices below start at :1.
+        cycle count below if it ends up sounding too fast/slow once the pads are firing; a pad's implied tempo
+        (for anything that cares) is derived straight from how long each of these slices is. The whole loop
+        uploads too, as "{bankName || "sample"}:0" — the slices below start at :1.
       </p>
 
       <div ref={containerRef} style={{ position: "relative", marginBottom: 8 }}>
@@ -240,7 +240,11 @@ export function BeatCutter({
         {slices.map((s, i) => {
           const tooShortToSplit = s.end - s.start < MIN_SLICE_SECONDS * 2;
           return (
-            <div key={`${s.start.toFixed(3)}-${s.end.toFixed(3)}`} className="track" style={{ cursor: "default" }}>
+            <div
+              key={`${s.start.toFixed(3)}-${s.end.toFixed(3)}`}
+              className="track"
+              style={{ cursor: "default" }}
+            >
               <span style={{ fontSize: 12 }}>
                 {/* +1: bankIndex 0 is reserved for the whole uncut loop, added automatically
                     on upload (see App.tsx's confirmCut) — these editor slices land at 1..N. */}

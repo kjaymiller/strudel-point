@@ -1,7 +1,7 @@
 import type { AutosaveDoc, StrudelJson } from "@strudel-point/shared";
 import { pool } from "./db.js";
-import { withValkey, isValkeyReady } from "./valkey.js";
-import { autosaveFlushesTotal, autosaveFlushErrorsTotal } from "./metrics.js";
+import { autosaveFlushErrorsTotal, autosaveFlushesTotal } from "./metrics.js";
+import { isValkeyReady, withValkey } from "./valkey.js";
 
 // The web client debounces autosave to 3s (AUTOSAVE_DEBOUNCE_MS in apps/web/src/App.tsx)
 // and also fires one immediately on every evaluate — so a room with someone actively

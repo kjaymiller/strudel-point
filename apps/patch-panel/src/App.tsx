@@ -1,45 +1,49 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChannelEvent, CreateTrackInput, StrudelJson, Track } from "@strudel-point/shared";
 import {
-  useChannelLibrary,
+  CodeSessionView,
+  getTrackDragData,
   LibraryDrawer,
-  requestStemSeparation,
   playableName,
   type RegisteredSound,
+  requestStemSeparation,
   type StemResult,
+  type TrackDragPayload,
+  useChannelLibrary,
 } from "@strudel-point/library";
-import { getStrudel, registerAllSamples, forgetSound, listRegisteredSounds } from "./strudel";
-import { useChannelSocket } from "./ws";
-import { SequencerModuleCard } from "./components/SequencerModuleCard";
-import { VcoModuleCard } from "./components/VcoModuleCard";
-import { SamplerModuleCard } from "./components/SamplerModuleCard";
-import { VcfModuleCard } from "./components/VcfModuleCard";
+import type { ChannelEvent, CreateTrackInput, StrudelJson, Track } from "@strudel-point/shared";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChannelModuleCard } from "./components/ChannelModuleCard";
+import { DelayModuleCard } from "./components/DelayModuleCard";
 import { EnvelopeModuleCard } from "./components/EnvelopeModuleCard";
+import { EosModuleCard } from "./components/EosModuleCard";
 import { FilterEnvModuleCard } from "./components/FilterEnvModuleCard";
 import { FilterLfoModuleCard } from "./components/FilterLfoModuleCard";
-import { PitchEnvModuleCard } from "./components/PitchEnvModuleCard";
-import { VibratoModuleCard } from "./components/VibratoModuleCard";
 import { FmOpModuleCard } from "./components/FmOpModuleCard";
-import { DelayModuleCard } from "./components/DelayModuleCard";
-import { ReverbModuleCard } from "./components/ReverbModuleCard";
-import { SiggenModuleCard } from "./components/SiggenModuleCard";
-import { EosModuleCard } from "./components/EosModuleCard";
 import { ModPedalModuleCard } from "./components/ModPedalModuleCard";
-import { ChannelModuleCard } from "./components/ChannelModuleCard";
 import { OutputModuleCard } from "./components/OutputModuleCard";
+import { PitchEnvModuleCard } from "./components/PitchEnvModuleCard";
 import { PresetBar } from "./components/PresetBar";
+import { ReverbModuleCard } from "./components/ReverbModuleCard";
+import { SamplerModuleCard } from "./components/SamplerModuleCard";
 import { Scope } from "./components/Scope";
-import { PatchBayProvider } from "./PatchBay";
-import { buildMixCode, effectiveSequenceFor, sequenceIsGatedFor } from "./patch";
+import { SequencerModuleCard } from "./components/SequencerModuleCard";
+import { SiggenModuleCard } from "./components/SiggenModuleCard";
+import { VcfModuleCard } from "./components/VcfModuleCard";
+import { VcoModuleCard } from "./components/VcoModuleCard";
+import { VibratoModuleCard } from "./components/VibratoModuleCard";
+import { type CodeRange, parsePatchCode } from "./importPatch";
 import {
   ADDABLE_MODULE_KINDS,
-  MODULE_LABELS,
   createModule,
-  moduleIdOfAddress,
+  MODULE_LABELS,
   type ModuleInstance,
   type ModuleKind,
+  moduleIdOfAddress,
 } from "./modules";
-import { defaultRack, deletePreset, factoryPresets, loadPresets, savePreset, type Preset } from "./presets";
+import { PatchBayProvider } from "./PatchBay";
+import { buildMixCode, effectiveSequenceFor, sequenceIsGatedFor } from "./patch";
+import { defaultRack, deletePreset, factoryPresets, loadPresets, type Preset, savePreset } from "./presets";
+import { forgetSound, getStrudel, listRegisteredSounds, registerAllSamples } from "./strudel";
+import { useChannelSocket } from "./ws";
 
 function channelIdFromLocation(): string {
   const hash = location.hash.replace(/^#/, "");
@@ -105,12 +109,16 @@ export default function App() {
   const refreshRegisteredSounds = useCallback(() => {
     listRegisteredSounds()
       .then(setRegisteredSounds)
-      .catch((err) => reportError(`couldn't read sound registry: ${err instanceof Error ? err.message : err}`));
+      .catch((err) =>
+        reportError(`couldn't read sound registry: ${err instanceof Error ? err.message : err}`),
+      );
   }, [reportError]);
   const library = useChannelLibrary(channelId, (samples) => {
     registerAllSamples(samples)
       .then(refreshRegisteredSounds)
-      .catch((err) => reportError(`couldn't load channel sounds: ${err instanceof Error ? err.message : err}`));
+      .catch((err) =>
+        reportError(`couldn't load channel sounds: ${err instanceof Error ? err.message : err}`),
+      );
   });
   // Built-in packs (dirt-samples/tidal-drum-machines) finish loading independently of
   // whether this channel has any custom samples at all — same "populate once the default
@@ -158,7 +166,9 @@ export default function App() {
       const hap = match ? { s: match[1], n: Number(match[2]) } : { s: name };
       getStrudel()
         .then((strudel) => strudel.superdough(hap, strudel.getAudioContext().currentTime + 0.05, 0.5))
-        .catch((err) => reportError(`couldn't preview "${name}": ${err instanceof Error ? err.message : err}`));
+        .catch((err) =>
+          reportError(`couldn't preview "${name}": ${err instanceof Error ? err.message : err}`),
+        );
     },
     [reportError],
   );
@@ -197,7 +207,9 @@ export default function App() {
       })
         .then(jsonOrThrow)
         .then((samples) => send({ type: "bank:renamed", oldName, newName, samples }))
-        .catch((err) => reportError(`couldn't rename "${oldName}": ${err instanceof Error ? err.message : err}`));
+        .catch((err) =>
+          reportError(`couldn't rename "${oldName}": ${err instanceof Error ? err.message : err}`),
+        );
     },
     [channelId, send, reportError],
   );
@@ -237,7 +249,9 @@ export default function App() {
 
   const removeModule = useCallback((id: string) => {
     setModules((mods) => mods.filter((m) => m.id !== id));
-    setCables((cbs) => cbs.filter((c) => !c.split("->").some((address) => moduleIdOfAddress(address) === id)));
+    setCables((cbs) =>
+      cbs.filter((c) => !c.split("->").some((address) => moduleIdOfAddress(address) === id)),
+    );
   }, []);
 
   const renameModule = useCallback((id: string, name: string) => {
@@ -367,12 +381,50 @@ export default function App() {
     setSaveState("idle");
   }, []);
 
-  const shareUrl = savedTrack ? `${location.origin}${location.pathname}?track=${savedTrack.id}#${channelId}` : null;
+  // Whatever importPatch.ts's parser couldn't turn into modules/cables from the most
+  // recently dropped track — shown read-only below so that source stays visible (and
+  // still gets saved if you save over this rack) instead of silently vanishing. Cleared
+  // on a drop that parses cleanly, so this panel only ever appears when there's actually
+  // something to review.
+  const [importReview, setImportReview] = useState<{
+    title: string;
+    code: string;
+    unmatchedRanges: CodeRange[];
+  } | null>(null);
+
+  // Turns a dropped Track's source back into this app's own module+cable rack — see
+  // importPatch.ts's own doc comment for what this can and can't reconstruct. Dropping a
+  // track is loading a *different* rack, not continuing to edit this one's save slot, so
+  // this resets the save state the same way starting a fresh preset would (saveAsNewTrack)
+  // rather than risking an unrelated track silently overwriting whichever one was already
+  // saved here.
+  const loadTrackFromDrag = useCallback(
+    (track: TrackDragPayload) => {
+      const parsed = parsePatchCode(track.code);
+      setModules(parsed.modules);
+      setCables(parsed.cables);
+      setActivePreset(null);
+      setTitle(track.title);
+      saveAsNewTrack();
+      setImportReview(
+        parsed.unmatchedRanges.length > 0
+          ? { title: track.title, code: track.code, unmatchedRanges: parsed.unmatchedRanges }
+          : null,
+      );
+    },
+    [saveAsNewTrack],
+  );
+
+  const shareUrl = savedTrack
+    ? `${location.origin}${location.pathname}?track=${savedTrack.id}#${channelId}`
+    : null;
 
   const connections = useMemo(() => new Set(cables), [cables]);
   const handleConnectionsChange = useCallback((next: Set<string>) => setCables(Array.from(next)), []);
 
-  const outputModule = modules.find((m): m is Extract<ModuleInstance, { kind: "output" }> => m.kind === "output");
+  const outputModule = modules.find(
+    (m): m is Extract<ModuleInstance, { kind: "output" }> => m.kind === "output",
+  );
 
   return (
     <PatchBayProvider connections={connections} onConnectionsChange={handleConnectionsChange}>
@@ -416,10 +468,8 @@ export default function App() {
             eats into the play space — same drawer apps/web/dj/pads render (see
             @strudel-point/library): sounds (built-in packs + this room's own uploads)
             and this room's saved Tracks, all draggable. Drag a sound name onto a
-            Sampler's Sample field (see SamplerModuleCard); Tracks are along for the same
-            "same tray everywhere" consistency but have no drop target of their own here
-            yet — a Track is Strudel source, not something this app's module+cable graph
-            currently knows how to load. */}
+            Sampler's Sample field (see SamplerModuleCard); drag a track onto the drop
+            zone below to load its rack (see loadTrackFromDrag/importPatch.ts). */}
         <LibraryDrawer
           tracks={library.tracks}
           customSamples={library.customSamples}
@@ -428,7 +478,42 @@ export default function App() {
           onUploadSlice={handleUploadSlice}
           onRenameBank={handleRenameBank}
           onSeparateStems={handleSeparateStems}
+          onLoadTrack={loadTrackFromDrag}
         />
+
+        {/* Always visible (not just while a track drag is in flight) so it's discoverable
+            without first knowing tracks are draggable — same "explicit drop target with
+            its own label" idea as apps/dj's own .deck-drop-target. getTrackDragData only
+            ever reads this app's typed track MIME (see dnd.ts), never plain text, so this
+            can't misfire on a module-card reorder drag even though both live under the
+            same header. */}
+        <div
+          className="track-drop-zone"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const dragged = getTrackDragData(e);
+            if (dragged) loadTrackFromDrag(dragged);
+          }}
+        >
+          drag a track from the library here to load its rack
+        </div>
+
+        {importReview && (
+          <section className="import-review">
+            <div className="import-review-header">
+              <span>
+                "{importReview.title}" loaded — {importReview.unmatchedRanges.length} part
+                {importReview.unmatchedRanges.length > 1 ? "s" : ""} of its code (highlighted below) couldn't
+                be turned back into modules and were left out of the rack.
+              </span>
+              <button className="secondary" onClick={() => setImportReview(null)}>
+                dismiss
+              </button>
+            </div>
+            <CodeSessionView code={importReview.code} unmatchedRanges={importReview.unmatchedRanges} />
+          </section>
+        )}
 
         {/* The toolbar: add any number of module instances, wire them together yourself
             with the patch bay's cables. Nothing plays until a VCO's audio-out chain
@@ -449,8 +534,8 @@ export default function App() {
 
         {unterminatedSourceIds.length > 0 && (
           <div className="unterminated-hint">
-            {unterminatedSourceIds.length} voice source{unterminatedSourceIds.length > 1 ? "s" : ""} (VCO/Sampler) not
-            reaching Output — cable its audio out all the way through to be heard.
+            {unterminatedSourceIds.length} voice source{unterminatedSourceIds.length > 1 ? "s" : ""}{" "}
+            (VCO/Sampler) not reaching Output — cable its audio out all the way through to be heard.
           </div>
         )}
 
@@ -505,7 +590,11 @@ export default function App() {
 
         <section className="panel">
           <div className="transport-row">
-            <button onClick={playInRoom} disabled={isPlaying} title="evaluate the whole rack for the room to hear">
+            <button
+              onClick={playInRoom}
+              disabled={isPlaying}
+              title="evaluate the whole rack for the room to hear"
+            >
               ▶ play in room
             </button>
             <button className="secondary" onClick={stop} disabled={!isPlaying} title="stop everything">
@@ -514,7 +603,12 @@ export default function App() {
           </div>
           <pre className="code-preview">{code}</pre>
           <div className="save-row">
-            <input type="text" placeholder="track title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input
+              type="text"
+              placeholder="track title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
             <button className="secondary" onClick={saveAsTrack} disabled={saveState === "saving"}>
               {savedTrack ? "update track" : "save as track"}
             </button>
@@ -566,33 +660,124 @@ function ModuleCard({
         />
       );
     case "vco":
-      return <VcoModuleCard module={module} onChange={onChangeParams} onNameChange={onNameChange} onRemove={onRemove} />;
+      return (
+        <VcoModuleCard
+          module={module}
+          onChange={onChangeParams}
+          onNameChange={onNameChange}
+          onRemove={onRemove}
+        />
+      );
     case "sampler":
-      return <SamplerModuleCard module={module} onChange={onChangeParams} onNameChange={onNameChange} onRemove={onRemove} />;
+      return (
+        <SamplerModuleCard
+          module={module}
+          onChange={onChangeParams}
+          onNameChange={onNameChange}
+          onRemove={onRemove}
+        />
+      );
     case "vcf":
-      return <VcfModuleCard module={module} onChange={onChangeParams} onNameChange={onNameChange} onRemove={onRemove} />;
+      return (
+        <VcfModuleCard
+          module={module}
+          onChange={onChangeParams}
+          onNameChange={onNameChange}
+          onRemove={onRemove}
+        />
+      );
     case "envelope":
-      return <EnvelopeModuleCard module={module} onChange={onChangeParams} onNameChange={onNameChange} onRemove={onRemove} />;
+      return (
+        <EnvelopeModuleCard
+          module={module}
+          onChange={onChangeParams}
+          onNameChange={onNameChange}
+          onRemove={onRemove}
+        />
+      );
     case "filterenv":
-      return <FilterEnvModuleCard module={module} onChange={onChangeParams} onNameChange={onNameChange} onRemove={onRemove} />;
+      return (
+        <FilterEnvModuleCard
+          module={module}
+          onChange={onChangeParams}
+          onNameChange={onNameChange}
+          onRemove={onRemove}
+        />
+      );
     case "filterlfo":
-      return <FilterLfoModuleCard module={module} onChange={onChangeParams} onNameChange={onNameChange} onRemove={onRemove} />;
+      return (
+        <FilterLfoModuleCard
+          module={module}
+          onChange={onChangeParams}
+          onNameChange={onNameChange}
+          onRemove={onRemove}
+        />
+      );
     case "pitchenv":
-      return <PitchEnvModuleCard module={module} onChange={onChangeParams} onNameChange={onNameChange} onRemove={onRemove} />;
+      return (
+        <PitchEnvModuleCard
+          module={module}
+          onChange={onChangeParams}
+          onNameChange={onNameChange}
+          onRemove={onRemove}
+        />
+      );
     case "vibrato":
-      return <VibratoModuleCard module={module} onChange={onChangeParams} onNameChange={onNameChange} onRemove={onRemove} />;
+      return (
+        <VibratoModuleCard
+          module={module}
+          onChange={onChangeParams}
+          onNameChange={onNameChange}
+          onRemove={onRemove}
+        />
+      );
     case "fmop":
-      return <FmOpModuleCard module={module} onChange={onChangeParams} onNameChange={onNameChange} onRemove={onRemove} />;
+      return (
+        <FmOpModuleCard
+          module={module}
+          onChange={onChangeParams}
+          onNameChange={onNameChange}
+          onRemove={onRemove}
+        />
+      );
     case "delay":
-      return <DelayModuleCard module={module} onChange={onChangeParams} onNameChange={onNameChange} onRemove={onRemove} />;
+      return (
+        <DelayModuleCard
+          module={module}
+          onChange={onChangeParams}
+          onNameChange={onNameChange}
+          onRemove={onRemove}
+        />
+      );
     case "reverb":
-      return <ReverbModuleCard module={module} onChange={onChangeParams} onNameChange={onNameChange} onRemove={onRemove} />;
+      return (
+        <ReverbModuleCard
+          module={module}
+          onChange={onChangeParams}
+          onNameChange={onNameChange}
+          onRemove={onRemove}
+        />
+      );
     case "siggen":
-      return <SiggenModuleCard module={module} onChange={onChangeParams} onNameChange={onNameChange} onRemove={onRemove} />;
+      return (
+        <SiggenModuleCard
+          module={module}
+          onChange={onChangeParams}
+          onNameChange={onNameChange}
+          onRemove={onRemove}
+        />
+      );
     case "eos":
       return <EosModuleCard module={module} onNameChange={onNameChange} onRemove={onRemove} />;
     case "modpedal":
-      return <ModPedalModuleCard module={module} onChange={onChangeParams} onNameChange={onNameChange} onRemove={onRemove} />;
+      return (
+        <ModPedalModuleCard
+          module={module}
+          onChange={onChangeParams}
+          onNameChange={onNameChange}
+          onRemove={onRemove}
+        />
+      );
     case "channel":
       return <ChannelModuleCard module={module} onNameChange={onNameChange} onRemove={onRemove} />;
     case "output":

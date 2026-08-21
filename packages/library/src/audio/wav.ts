@@ -78,7 +78,11 @@ export function sliceToFile(buffer: AudioBuffer, startSec: number, endSec: numbe
 export function resampleBuffer(buffer: AudioBuffer, rate: number): AudioBuffer {
   if (!(rate > 0)) throw new Error("resampleBuffer: rate must be > 0");
   const newLength = Math.max(1, Math.round(buffer.length / rate));
-  const out = new AudioBuffer({ numberOfChannels: buffer.numberOfChannels, length: newLength, sampleRate: buffer.sampleRate });
+  const out = new AudioBuffer({
+    numberOfChannels: buffer.numberOfChannels,
+    length: newLength,
+    sampleRate: buffer.sampleRate,
+  });
   for (let c = 0; c < buffer.numberOfChannels; c++) {
     const input = buffer.getChannelData(c);
     const output = new Float32Array(newLength);

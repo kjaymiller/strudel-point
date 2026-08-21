@@ -3,11 +3,14 @@
 // deployables that just happen to talk to the same gateway/room). See that file for the
 // long-form rationale on prebake/aliasBank ordering and the iOS resume() dance; unchanged
 // here because decks need exactly the same sample packs (dirt-samples + tidal drum
-// machines) available to resolve whatever bank names a room's custom samples used. This
-// app deliberately doesn't fetch/register a room's *custom* samples itself — see
-// App.tsx's handleEvent comment: sample/bank management belongs to apps/pads now — so
-// listRegisteredSounds below only ever reflects these built-in packs, not any custom
-// upload, for @strudel-point/library's <LibraryDrawer> "all sounds" tab.
+// machines) available to resolve whatever bank names a room's custom samples used, plus
+// the synth/zzfx/soundfont (GM instrument) registrations apps/web's own prebake also
+// does — those are all in-memory registrations (no room-specific data), so there's no
+// reason this app's <LibraryDrawer> "all sounds" tab should show a narrower set than
+// apps/web's own SoundBank does. This app deliberately doesn't fetch/register a room's
+// *custom* samples itself — see App.tsx's handleEvent comment: sample/bank management
+// belongs to apps/pads now — so listRegisteredSounds below only ever reflects these
+// built-in packs, not any custom upload.
 import type { RegisteredSound } from "@strudel-point/library";
 
 let strudelModule: typeof import("@strudel/web") | null = null;
@@ -30,6 +33,11 @@ export async function getStrudel() {
             undefined,
             { tag: "tidal-drum-machines" },
           ),
+          strudelModule!.registerSynthSounds(),
+          strudelModule!.registerZZFXSounds(),
+          // Dynamic import: see apps/web/src/strudel.ts — @strudel/soundfonts reads
+          // `window` at import time, which blows up outside a real browser.
+          import("@strudel/soundfonts").then(({ registerSoundfonts }) => registerSoundfonts()),
         ]);
         await strudelModule!.aliasBank(
           "https://raw.githubusercontent.com/todepond/samples/main/tidal-drum-machines-alias.json",

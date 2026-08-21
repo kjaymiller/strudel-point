@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   forwardRef,
   useCallback,
   useEffect,
@@ -6,11 +7,10 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
-import { getStrudel, getStrudelIfReady } from "../strudel";
 import { peaksOf } from "../audio";
 import { hueForBank } from "../color";
+import { getStrudel, getStrudelIfReady } from "../strudel";
 
 // Exported so App.tsx can size its own rackNames array and hints off the same number
 // rather than a second hardcoded 64 drifting out of sync with this one.
@@ -91,7 +91,12 @@ function bankNameOf(ref: string): string {
  * all tinted to `hue` (see color.ts's hueForBank) so each bank reads as its own color
  * rather than every pad looking identical. `progress` is 0-1, or null when nothing's
  * playing. */
-function drawPad(canvas: HTMLCanvasElement, wf: WaveformState | undefined, progress: number | null, hue: number) {
+function drawPad(
+  canvas: HTMLCanvasElement,
+  wf: WaveformState | undefined,
+  progress: number | null,
+  hue: number,
+) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   const { width, height } = canvas;

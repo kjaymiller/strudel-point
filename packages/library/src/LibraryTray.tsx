@@ -15,8 +15,9 @@
 // ...) is meant to be styled per-app, same as this app's own existing `panel`/`knob`
 // convention, so the tray reads as native to whichever app it's dropped into rather than
 // visually foreign.
-import { useMemo, useRef, useState } from "react";
+
 import type { CustomSample, Track } from "@strudel-point/shared";
+import { useMemo, useRef, useState } from "react";
 import { groupSampleBanks, playableName } from "./banks";
 import { setSoundDragData, setTrackDragData } from "./dnd";
 import { SampleEditor, type SampleEditorHandle, type StemResult } from "./SampleEditor";
@@ -75,7 +76,11 @@ function SoundChip({
   onToggleSelected?: () => void;
 }) {
   return (
-    <div className="library-sound-chip" draggable onDragStart={(e) => setSoundDragData(e, { name, label: name })}>
+    <div
+      className="library-sound-chip"
+      draggable
+      onDragStart={(e) => setSoundDragData(e, { name, label: name })}
+    >
       {onToggleSelected && (
         <input
           type="checkbox"
@@ -96,7 +101,13 @@ function SoundChip({
         {name}
       </button>
       {onEdit && (
-        <button type="button" className="library-sound-edit" onClick={onEdit} title={`edit ${name}`} aria-label={`edit ${name}`}>
+        <button
+          type="button"
+          className="library-sound-edit"
+          onClick={onEdit}
+          title={`edit ${name}`}
+          aria-label={`edit ${name}`}
+        >
           ✎
         </button>
       )}
@@ -172,7 +183,9 @@ export function LibraryTray({
   const filteredMyBanks = useMemo(() => {
     if (!q) return myBanks;
     return myBanks.filter(
-      (bank) => bank.bankName.toLowerCase().includes(q) || bank.slices.some((s) => playableName(s).toLowerCase().includes(q)),
+      (bank) =>
+        bank.bankName.toLowerCase().includes(q) ||
+        bank.slices.some((s) => playableName(s).toLowerCase().includes(q)),
     );
   }, [myBanks, q]);
   const filteredMySingles = useMemo(() => {

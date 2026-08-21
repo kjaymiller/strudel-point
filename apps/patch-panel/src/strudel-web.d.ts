@@ -26,6 +26,13 @@ declare module "@strudel/web" {
   ): Promise<unknown>;
   export function aliasBank(source: string | Record<string, string | string[]>): Promise<unknown>;
 
+  /** Registers the built-in synth waveforms (sine/square/sawtooth/etc) as playable
+   * sounds — same registry as sample banks, just backed by an oscillator instead of a
+   * decoded buffer. Costs nothing to await (no network fetch). */
+  export function registerSynthSounds(): Promise<unknown>;
+  /** Registers the ZzFX one-line synth sound set (8-bit/chiptune-ish blips) the same way. */
+  export function registerZZFXSounds(): Promise<unknown>;
+
   export interface SoundEntry {
     onTrigger: unknown;
     data?: {

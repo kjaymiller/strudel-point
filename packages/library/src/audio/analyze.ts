@@ -116,7 +116,12 @@ function detectBpm(onset: Float32Array, frameRate: number): number {
 
 /** For `cycles` even divisions of the loop, snap each expected boundary to the strongest
  * nearby onset instead of a blind grid — a real transient beats a guessed one. */
-export function suggestCuts(onset: Float32Array, frameRate: number, duration: number, cycles: number): number[] {
+export function suggestCuts(
+  onset: Float32Array,
+  frameRate: number,
+  duration: number,
+  cycles: number,
+): number[] {
   if (cycles <= 1) return [];
   const step = duration / cycles;
   const windowFrames = Math.max(1, Math.round(step * 0.25 * frameRate));

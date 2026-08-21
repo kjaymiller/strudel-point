@@ -22,6 +22,13 @@ declare module "@strudel/web" {
   ): Promise<unknown>;
   export function aliasBank(source: string | Record<string, string | string[]>): Promise<unknown>;
   export function getAudioContext(): AudioContext;
+
+  /** Registers the built-in synth waveforms (sine/square/sawtooth/etc) as playable
+   * sounds — same registry as sample banks, just backed by an oscillator instead of a
+   * decoded buffer. Costs nothing to await (no network fetch). */
+  export function registerSynthSounds(): Promise<unknown>;
+  /** Registers the ZzFX one-line synth sound set (8-bit/chiptune-ish blips) the same way. */
+  export function registerZZFXSounds(): Promise<unknown>;
   /**
    * Current position of the shared scheduler, in fractional cycles since transport start —
    * the same clock @strudel/core's Pattern#draw (and setTime, wired up inside initStrudel)

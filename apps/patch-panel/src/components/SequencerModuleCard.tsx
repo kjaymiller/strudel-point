@@ -1,7 +1,7 @@
+import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
 import { Jack } from "../PatchBay";
 import { ModuleHeader } from "./ModuleHeader";
 import { SequencePanel } from "./SequencePanel";
-import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
 
 type SequencerInstance = Extract<ModuleInstance, { kind: "sequencer" }>;
 
@@ -35,7 +35,13 @@ export function SequencerModuleCard({
   const set = (patch: Partial<SequencerInstance["params"]>) => onChange({ ...p, ...patch });
   return (
     <section className="panel module-card">
-      <ModuleHeader kindLabel="Sequencer" name={module.name} onNameChange={onNameChange} colorId={module.id} onRemove={onRemove} />
+      <ModuleHeader
+        kindLabel="Sequencer"
+        name={module.name}
+        onNameChange={onNameChange}
+        colorId={module.id}
+        onRemove={onRemove}
+      />
       <SequencePanel
         playMode={p.playMode}
         onPlayModeChange={(playMode) => set({ playMode })}

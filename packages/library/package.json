@@ -9,11 +9,19 @@
     "react": "^18.3.1"
   },
   "dependencies": {
-    "@strudel-point/shared": "*"
+    "@codemirror/lang-javascript": "^6.2.2",
+    "@codemirror/state": "^6.5.0",
+    "@codemirror/theme-one-dark": "^6.1.2",
+    "@codemirror/view": "^6.35.0",
+    "@strudel-point/shared": "*",
+    "codemirror": "^6.0.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.17",
     "react": "^18.3.1",
     "typescript": "^5.7.2"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
   }
 }

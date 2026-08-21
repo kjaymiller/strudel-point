@@ -1,8 +1,8 @@
-import { Knob } from "./Knob";
-import { Jack } from "../PatchBay";
-import { ModuleHeader } from "./ModuleHeader";
 import { getSoundDragData } from "@strudel-point/library";
 import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
+import { Jack } from "../PatchBay";
+import { Knob } from "./Knob";
+import { ModuleHeader } from "./ModuleHeader";
 
 type SamplerInstance = Extract<ModuleInstance, { kind: "sampler" }>;
 
@@ -38,7 +38,13 @@ export function SamplerModuleCard({ module, onChange, onNameChange, onRemove }: 
   const set = (patch: Partial<SamplerInstance["params"]>) => onChange({ ...p, ...patch });
   return (
     <section className="panel module-card">
-      <ModuleHeader kindLabel="Sampler" name={module.name} onNameChange={onNameChange} colorId={module.id} onRemove={onRemove} />
+      <ModuleHeader
+        kindLabel="Sampler"
+        name={module.name}
+        onNameChange={onNameChange}
+        colorId={module.id}
+        onRemove={onRemove}
+      />
       <div className="knob-row">
         <div
           className="sampler-name"
@@ -81,7 +87,13 @@ export function SamplerModuleCard({ module, onChange, onNameChange, onRemove }: 
       </div>
       <div className="sequence-presets">
         {SAMPLE_PRESETS.map((name) => (
-          <button key={name} type="button" className="secondary" onClick={() => set({ sampleName: name })} title={name}>
+          <button
+            key={name}
+            type="button"
+            className="secondary"
+            onClick={() => set({ sampleName: name })}
+            title={name}
+          >
             {name}
           </button>
         ))}

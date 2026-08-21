@@ -1,7 +1,7 @@
-import { Knob } from "./Knob";
-import { Jack } from "../PatchBay";
-import { ModuleHeader } from "./ModuleHeader";
 import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
+import { Jack } from "../PatchBay";
+import { Knob } from "./Knob";
+import { ModuleHeader } from "./ModuleHeader";
 
 type DelayInstance = Extract<ModuleInstance, { kind: "delay" }>;
 
@@ -23,17 +23,48 @@ export function DelayModuleCard({ module, onChange, onNameChange, onRemove }: De
   const set = (patch: Partial<DelayInstance["params"]>) => onChange({ ...p, ...patch });
   return (
     <section className="panel module-card">
-      <ModuleHeader kindLabel="Delay" name={module.name} onNameChange={onNameChange} colorId={module.id} onRemove={onRemove} />
+      <ModuleHeader
+        kindLabel="Delay"
+        name={module.name}
+        onNameChange={onNameChange}
+        colorId={module.id}
+        onRemove={onRemove}
+      />
       <div className="knob-row">
         <div className="jack-slot">
-          <Jack address={jackAddress(module.id, "audio-in")} role="audio-in" capacity={jackCapacity("delay", "audio-in")} label="audio in" />
+          <Jack
+            address={jackAddress(module.id, "audio-in")}
+            role="audio-in"
+            capacity={jackCapacity("delay", "audio-in")}
+            label="audio in"
+          />
           <span className="jack-label">in</span>
         </div>
         <Knob label="Send" value={p.send} min={0} max={1} step={0.01} onChange={(send) => set({ send })} />
-        <Knob label="Time" value={p.time} min={0.02} max={2} step={0.01} unit="s" onChange={(time) => set({ time })} />
-        <Knob label="Feedback" value={p.feedback} min={0} max={0.98} step={0.01} onChange={(feedback) => set({ feedback })} />
+        <Knob
+          label="Time"
+          value={p.time}
+          min={0.02}
+          max={2}
+          step={0.01}
+          unit="s"
+          onChange={(time) => set({ time })}
+        />
+        <Knob
+          label="Feedback"
+          value={p.feedback}
+          min={0}
+          max={0.98}
+          step={0.01}
+          onChange={(feedback) => set({ feedback })}
+        />
         <div className="jack-slot">
-          <Jack address={jackAddress(module.id, "audio-out")} role="audio-out" capacity={jackCapacity("delay", "audio-out")} label="audio out" />
+          <Jack
+            address={jackAddress(module.id, "audio-out")}
+            role="audio-out"
+            capacity={jackCapacity("delay", "audio-out")}
+            label="audio out"
+          />
           <span className="jack-label">out</span>
         </div>
       </div>

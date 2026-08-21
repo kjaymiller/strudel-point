@@ -12,10 +12,7 @@ export function SaveDialog({ open, onClose, onSave }: SaveDialogProps) {
   if (!open) return null;
 
   return (
-    <dialog
-      open
-      style={{ position: "fixed", inset: 0, margin: "auto", width: 320, zIndex: 10 }}
-    >
+    <dialog open style={{ position: "fixed", inset: 0, margin: "auto", width: 320, zIndex: 10 }}>
       <form
         onSubmit={(e) => {
           e.preventDefault();

@@ -1,5 +1,5 @@
-import pg from "pg";
 import { SpanStatusCode } from "@opentelemetry/api";
+import pg from "pg";
 import { env } from "./env.js";
 import { tracer } from "./telemetry.js";
 

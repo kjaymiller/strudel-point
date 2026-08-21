@@ -10,7 +10,6 @@ this against a real spleeter install from here, so treat the exact API calls bel
 exercised end to end."
 """
 import base64
-import io
 import tempfile
 
 from flask import Flask, Response, jsonify, request

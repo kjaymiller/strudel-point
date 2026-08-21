@@ -1,6 +1,6 @@
+import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
 import { Jack } from "../PatchBay";
 import { ModuleHeader } from "./ModuleHeader";
-import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
 
 type ChannelInstance = Extract<ModuleInstance, { kind: "channel" }>;
 
@@ -21,7 +21,13 @@ interface ChannelModuleCardProps {
 export function ChannelModuleCard({ module, onNameChange, onRemove }: ChannelModuleCardProps) {
   return (
     <section className="panel module-card">
-      <ModuleHeader kindLabel="Channel" name={module.name} onNameChange={onNameChange} colorId={module.id} onRemove={onRemove} />
+      <ModuleHeader
+        kindLabel="Channel"
+        name={module.name}
+        onNameChange={onNameChange}
+        colorId={module.id}
+        onRemove={onRemove}
+      />
       <div className="knob-row">
         <div className="jack-slot">
           <Jack

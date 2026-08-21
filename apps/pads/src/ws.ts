@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChannelEvent, ClientMessage } from "@strudel-point/shared";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // Straight copy of apps/dj/src/ws.ts (itself a copy of apps/web/src/ws.ts) — see that
 // file's comments for why /ws is *not* proxied through Vite (the browser connects to the

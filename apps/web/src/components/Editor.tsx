@@ -1,16 +1,12 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { EditorState, Prec, StateEffect, StateField } from "@codemirror/state";
-import { Decoration, type DecorationSet, EditorView, keymap } from "@codemirror/view";
 import { javascript } from "@codemirror/lang-javascript";
+import { EditorState, Prec, StateEffect, StateField } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { basicSetup } from "codemirror";
+import { Decoration, type DecorationSet, EditorView, keymap } from "@codemirror/view";
 // This is the real slider(...) widget mechanism strudel.cc itself uses (see App.tsx for
 // where the widget configs come from).
-import {
-  sliderPlugin,
-  updateSliderWidgets,
-  type SliderWidgetConfig,
-} from "@strudel/codemirror/slider.mjs";
+import { type SliderWidgetConfig, sliderPlugin, updateSliderWidgets } from "@strudel/codemirror/slider.mjs";
+import { basicSetup } from "codemirror";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { installKnobDecorations } from "../knobs";
 import { getSoundDragData } from "../sampleDnd";
 

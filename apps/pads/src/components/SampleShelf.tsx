@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import { hueForBank } from "../color";
 
 export interface ShelfBank {
@@ -44,7 +44,9 @@ export function SampleShelf({ banks, onPreview, onPreviewBankStart, onPreviewBan
   // gets added (collapsed) as it shows up later too — see the effect-free "seen so far"
   // merge below, so a freshly uploaded/dragged-in bank still starts collapsed rather than
   // this Set simply not knowing about it (and thus rendering it expanded by omission).
-  const [collapsedBanks, setCollapsedBanks] = useState<Set<string>>(() => new Set(banks.map((b) => b.bankName)));
+  const [collapsedBanks, setCollapsedBanks] = useState<Set<string>>(
+    () => new Set(banks.map((b) => b.bankName)),
+  );
   useEffect(() => {
     setCollapsedBanks((prev) => {
       const unseen = banks.filter((b) => !prev.has(b.bankName));
@@ -85,8 +87,8 @@ export function SampleShelf({ banks, onPreview, onPreviewBankStart, onPreviewBan
   if (banks.length === 0) {
     return (
       <p className="hint" style={{ margin: "0 0 16px" }}>
-        no sound banks in this room yet — drop a loop above to cut one, then drag its
-        slices onto the pads below.
+        no sound banks in this room yet — drop a loop above to cut one, then drag its slices onto the pads
+        below.
       </p>
     );
   }

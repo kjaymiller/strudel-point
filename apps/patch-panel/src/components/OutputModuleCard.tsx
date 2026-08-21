@@ -1,6 +1,6 @@
+import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
 import { Jack } from "../PatchBay";
 import { PanelColorSwatch } from "./PanelColorSwatch";
-import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
 
 type OutputInstance = Extract<ModuleInstance, { kind: "output" }>;
 

@@ -3,8 +3,9 @@
 // Strudel sound registry itself: every app (web/dj/pads/patch-panel) has its own
 // singleton with its own prebake (see apps/*/src/strudel.ts), so registering fetched
 // samples into it is the caller's job via `onSamples` below.
-import { useCallback, useEffect, useState } from "react";
+
 import type { CustomSample, Track } from "@strudel-point/shared";
+import { useCallback, useEffect, useState } from "react";
 
 async function jsonOrThrow(res: Response) {
   if (!res.ok) {
@@ -31,7 +32,10 @@ export interface ChannelLibrary {
  * timer or depend on its identity for anything besides that one call, so passing an
  * inline arrow function each render is fine; no need to useCallback it.
  */
-export function useChannelLibrary(channelId: string, onSamples?: (samples: CustomSample[]) => void): ChannelLibrary {
+export function useChannelLibrary(
+  channelId: string,
+  onSamples?: (samples: CustomSample[]) => void,
+): ChannelLibrary {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [customSamples, setCustomSamples] = useState<CustomSample[]>([]);
   const [loading, setLoading] = useState(true);

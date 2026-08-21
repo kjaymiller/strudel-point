@@ -1,12 +1,12 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { CustomSample } from "@strudel-point/shared";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import {
   analyzeBeat,
+  type BeatAnalysis,
   computeRangePeaks,
   decodeAudioFile,
   decodeAudioUrl,
   recomputeCuts,
-  type BeatAnalysis,
 } from "./audio/analyze";
 import { concatAudioBuffers, resampleBuffer, sliceToFile } from "./audio/wav";
 import { suggestName } from "./banks";
@@ -158,12 +158,26 @@ function SliceTrimmer({
       <canvas ref={canvasRef} style={{ width, height, display: "block" }} />
       {clip.start > 0 && (
         <div
-          style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${startPct}%`, background: "rgba(0,0,0,0.6)" }}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: `${startPct}%`,
+            background: "rgba(0,0,0,0.6)",
+          }}
         />
       )}
       {clip.end > 0 && (
         <div
-          style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: `${endPct}%`, background: "rgba(0,0,0,0.6)" }}
+          style={{
+            position: "absolute",
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: `${endPct}%`,
+            background: "rgba(0,0,0,0.6)",
+          }}
         />
       )}
       <div
@@ -240,9 +254,7 @@ export const SampleEditor = forwardRef<SampleEditorHandle, SampleEditorProps>(fu
   const [renameValue, setRenameValue] = useState("");
   // Keyed by slice time range (stable across re-renders, unlike index — which shifts when a
   // cut is merged away) rather than by index, so per-slice upload status survives that.
-  const [sliceStatus, setSliceStatus] = useState<Map<string, "uploading" | "done" | "error">>(
-    new Map(),
-  );
+  const [sliceStatus, setSliceStatus] = useState<Map<string, "uploading" | "done" | "error">>(new Map());
   // Per-slice trim (clip-in/clip-out), keyed the same way as sliceStatus. Absent === untrimmed.
   const [clips, setClips] = useState<Map<string, Clip>>(new Map());
   // Speed knob for resampleBuffer — 1 = untouched. Applying it replaces `buffer` with the
@@ -577,7 +589,17 @@ export const SampleEditor = forwardRef<SampleEditorHandle, SampleEditorProps>(fu
       setError(`upload failed: ${err instanceof Error ? err.message : err}`);
       setStage("ready");
     }
-  }, [buffer, analysis, bankName, slices, sliceStatus, getClip, onUploadSlice, ensureWholeUploaded, wholeUploaded]);
+  }, [
+    buffer,
+    analysis,
+    bankName,
+    slices,
+    sliceStatus,
+    getClip,
+    onUploadSlice,
+    ensureWholeUploaded,
+    wholeUploaded,
+  ]);
 
   if (stage === "idle" || stage === "analyzing") {
     return (
@@ -617,9 +639,9 @@ export const SampleEditor = forwardRef<SampleEditorHandle, SampleEditorProps>(fu
           }}
         />
         <p className="sample-editor-hint">
-          analyzes a loop's waveform, guesses its tempo/cycle count and where the cycle
-          boundaries fall, and only uploads once you confirm the cuts — all slices land in one
-          sound bank (s("name:0"), s("name:1"), …).
+          analyzes a loop's waveform, guesses its tempo/cycle count and where the cycle boundaries fall, and
+          only uploads once you confirm the cuts — all slices land in one sound bank (s("name:0"),
+          s("name:1"), …).
         </p>
       </div>
     );
@@ -699,7 +721,11 @@ export const SampleEditor = forwardRef<SampleEditorHandle, SampleEditorProps>(fu
               style={{ width: 64 }}
               disabled={stage !== "ready"}
             />
-            <button className="secondary" disabled={stage !== "ready" || resampleRate === 1} onClick={applyResample}>
+            <button
+              className="secondary"
+              disabled={stage !== "ready" || resampleRate === 1}
+              onClick={applyResample}
+            >
               resample
             </button>
             <span className="sample-editor-hint" style={{ margin: 0 }}>
@@ -714,7 +740,8 @@ export const SampleEditor = forwardRef<SampleEditorHandle, SampleEditorProps>(fu
               </button>
               {stemsState === "done" && (
                 <span className="sample-editor-hint" style={{ margin: 0 }}>
-                  ✓ {stems.length} stem{stems.length === 1 ? "" : "s"} added — {stems.map((s) => s.name).join(", ")}
+                  ✓ {stems.length} stem{stems.length === 1 ? "" : "s"} added —{" "}
+                  {stems.map((s) => s.name).join(", ")}
                 </span>
               )}
             </div>
@@ -802,8 +829,8 @@ export const SampleEditor = forwardRef<SampleEditorHandle, SampleEditorProps>(fu
           {stage === "done" && uploadedBank && (
             <>
               <p className="sample-editor-done">
-                ✓ uploaded {uploadedBank.count} slices as "{uploadedBank.name}" — try{" "}
-                s("{uploadedBank.name}:0 {uploadedBank.name}:1")
+                ✓ uploaded {uploadedBank.count} slices as "{uploadedBank.name}" — try s("{uploadedBank.name}:0{" "}
+                {uploadedBank.name}:1")
               </p>
               <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
                 <input

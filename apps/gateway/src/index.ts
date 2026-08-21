@@ -1,31 +1,31 @@
 import "./telemetry.js"; // must be first: patches http/express/pg/ws before they're imported below
-import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
-import express, { type ErrorRequestHandler } from "express";
-import cors from "cors";
-import { WebSocket, WebSocketServer } from "ws";
+import { createServer } from "node:http";
 import type { ChannelEvent, ClientMessage } from "@strudel-point/shared";
+import cors from "cors";
+import express, { type ErrorRequestHandler } from "express";
+import { WebSocket, WebSocketServer } from "ws";
+import { startAutosaveFlusher, stopAutosaveFlusher } from "./autosaveBuffer.js";
+import { pool } from "./db.js";
 import { env } from "./env.js";
 import { connectKafka, disconnectKafka, publishChannelEvent, runConsumer } from "./kafka.js";
-import { connectStorage, disconnectStorage } from "./storage.js";
-import { connectValkey, disconnectValkey } from "./valkey.js";
+import {
+  httpErrorsTotal,
+  httpRequestsTotal,
+  registry,
+  wsErrorsTotal,
+  wsMessagesReceivedTotal,
+  wsMessagesSentTotal,
+} from "./metrics.js";
 import { dropPeer, touchPeer } from "./presence.js";
-import { startAutosaveFlusher, stopAutosaveFlusher } from "./autosaveBuffer.js";
-import { broadcastToChannel, findClient, joinRoom, leaveRoom, type Client } from "./rooms.js";
-import { pool } from "./db.js";
-import { tracksRouter } from "./routes/tracks.js";
+import { broadcastToChannel, type Client, findClient, joinRoom, leaveRoom } from "./rooms.js";
 import { autosaveRouter } from "./routes/autosave.js";
+import { channelsRouter } from "./routes/channels.js";
 import { samplesRouter } from "./routes/samples.js";
 import { stemsRouter } from "./routes/stems.js";
-import { channelsRouter } from "./routes/channels.js";
-import {
-  registry,
-  httpRequestsTotal,
-  httpErrorsTotal,
-  wsMessagesSentTotal,
-  wsMessagesReceivedTotal,
-  wsErrorsTotal,
-} from "./metrics.js";
+import { tracksRouter } from "./routes/tracks.js";
+import { connectStorage, disconnectStorage } from "./storage.js";
+import { connectValkey, disconnectValkey } from "./valkey.js";
 
 const app = express();
 app.use(cors({ origin: env.corsOrigin }));

@@ -1,9 +1,9 @@
 import { Router } from "express";
 import multer from "multer";
-import { pool } from "../db.js";
 import { asyncHandler } from "../asyncHandler.js";
-import { putSampleBytes } from "../storage.js";
+import { pool } from "../db.js";
 import { env } from "../env.js";
+import { putSampleBytes } from "../storage.js";
 import { NAME_PATTERN, rowToSample } from "./samples.js";
 
 export const stemsRouter = Router();
@@ -33,9 +33,7 @@ stemsRouter.post(
     const baseName = (req.body?.name || "").trim();
     if (!file) return res.status(400).json({ error: "file is required" });
     if (!NAME_PATTERN.test(baseName)) {
-      return res
-        .status(400)
-        .json({ error: "name must be 1-64 characters of letters, numbers, _ or -" });
+      return res.status(400).json({ error: "name must be 1-64 characters of letters, numbers, _ or -" });
     }
 
     const form = new FormData();

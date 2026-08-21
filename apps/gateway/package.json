@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "bun dist/index.js"
+    "start": "bun dist/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",

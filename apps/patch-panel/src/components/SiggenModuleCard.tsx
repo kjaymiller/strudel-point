@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Knob } from "./Knob";
-import { Jack } from "../PatchBay";
-import { ModuleHeader } from "./ModuleHeader";
-import { getStrudelIfReady } from "../strudel";
-import { BASE_STEP_MS, STEP_COUNT } from "../sequencer";
 import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
+import { Jack } from "../PatchBay";
+import { BASE_STEP_MS, STEP_COUNT } from "../sequencer";
+import { getStrudelIfReady } from "../strudel";
+import { Knob } from "./Knob";
+import { ModuleHeader } from "./ModuleHeader";
 
 type SiggenInstance = Extract<ModuleInstance, { kind: "siggen" }>;
 
@@ -81,9 +81,23 @@ export function SiggenModuleCard({ module, onChange, onNameChange, onRemove }: S
 
   return (
     <section className="panel module-card signalgen-panel">
-      <ModuleHeader kindLabel="Signal gen" name={module.name} onNameChange={onNameChange} colorId={module.id} onRemove={onRemove} />
+      <ModuleHeader
+        kindLabel="Signal gen"
+        name={module.name}
+        onNameChange={onNameChange}
+        colorId={module.id}
+        onRemove={onRemove}
+      />
       <div className="signalgen-header">
-        <Knob label="Rate" value={rate} min={0.25} max={4} step={0.25} unit="x" onChange={(r) => onChange({ gates, rate: r })} />
+        <Knob
+          label="Rate"
+          value={rate}
+          min={0.25}
+          max={4}
+          step={0.25}
+          unit="x"
+          onChange={(r) => onChange({ gates, rate: r })}
+        />
         <button
           type="button"
           className="secondary"

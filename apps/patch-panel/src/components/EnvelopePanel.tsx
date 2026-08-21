@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { Knob } from "./Knob";
+import { type Adsr, type JackRole, jackAddress } from "../modules";
 import { Jack } from "../PatchBay";
-import { jackAddress, type Adsr, type JackRole } from "../modules";
+import { Knob } from "./Knob";
 
 interface EnvelopePanelProps {
   /** Every ADSR-shaped module's own id — used to compute this envelope's one generic
@@ -31,21 +31,64 @@ interface EnvelopePanelProps {
  * patch.ts). One generic env-mod-in jack (not per-stage — see ModPedalModuleCard/
  * patch.ts's lfoSuffixFor) accepts any number of Mod pedals, each picking which one of
  * these four stages it sweeps via its own Target control. */
-export function EnvelopePanel({ moduleId, envelope, onChange, extra, cvOutJack, audioJacks }: EnvelopePanelProps) {
+export function EnvelopePanel({
+  moduleId,
+  envelope,
+  onChange,
+  extra,
+  cvOutJack,
+  audioJacks,
+}: EnvelopePanelProps) {
   const set = (patch: Partial<Adsr>) => onChange({ ...envelope, ...patch });
   return (
     <div className="knob-row">
       {audioJacks && (
         <div className="jack-slot">
-          <Jack address={audioJacks.inAddress} role="audio-in" capacity={audioJacks.inCapacity} label="audio in" />
+          <Jack
+            address={audioJacks.inAddress}
+            role="audio-in"
+            capacity={audioJacks.inCapacity}
+            label="audio in"
+          />
           <span className="jack-label">in</span>
         </div>
       )}
       {extra}
-      <Knob label="Attack" value={envelope.attack} min={0} max={2} step={0.005} unit="s" onChange={(attack) => set({ attack })} />
-      <Knob label="Decay" value={envelope.decay} min={0} max={2} step={0.005} unit="s" onChange={(decay) => set({ decay })} />
-      <Knob label="Sustain" value={envelope.sustain} min={0} max={1} step={0.01} onChange={(sustain) => set({ sustain })} />
-      <Knob label="Release" value={envelope.release} min={0} max={4} step={0.005} unit="s" onChange={(release) => set({ release })} />
+      <Knob
+        label="Attack"
+        value={envelope.attack}
+        min={0}
+        max={2}
+        step={0.005}
+        unit="s"
+        onChange={(attack) => set({ attack })}
+      />
+      <Knob
+        label="Decay"
+        value={envelope.decay}
+        min={0}
+        max={2}
+        step={0.005}
+        unit="s"
+        onChange={(decay) => set({ decay })}
+      />
+      <Knob
+        label="Sustain"
+        value={envelope.sustain}
+        min={0}
+        max={1}
+        step={0.01}
+        onChange={(sustain) => set({ sustain })}
+      />
+      <Knob
+        label="Release"
+        value={envelope.release}
+        min={0}
+        max={4}
+        step={0.005}
+        unit="s"
+        onChange={(release) => set({ release })}
+      />
       <div className="jack-slot">
         <Jack
           address={jackAddress(moduleId, "env-mod-in")}
@@ -57,13 +100,23 @@ export function EnvelopePanel({ moduleId, envelope, onChange, extra, cvOutJack, 
       </div>
       {cvOutJack && (
         <div className="jack-slot">
-          <Jack address={cvOutJack.address} role={cvOutJack.role} capacity={cvOutJack.capacity} label={cvOutJack.label} />
+          <Jack
+            address={cvOutJack.address}
+            role={cvOutJack.role}
+            capacity={cvOutJack.capacity}
+            label={cvOutJack.label}
+          />
           <span className="jack-label">out</span>
         </div>
       )}
       {audioJacks && (
         <div className="jack-slot">
-          <Jack address={audioJacks.outAddress} role="audio-out" capacity={audioJacks.outCapacity} label="audio out" />
+          <Jack
+            address={audioJacks.outAddress}
+            role="audio-out"
+            capacity={audioJacks.outCapacity}
+            label="audio out"
+          />
           <span className="jack-label">out</span>
         </div>
       )}

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
 import type { Channel } from "@strudel-point/shared";
+import { useEffect, useRef, useState } from "react";
 
 interface RoomSwitcherProps {
   open: boolean;
@@ -42,10 +42,7 @@ export function RoomSwitcher({ open, currentChannelId, onClose, onSwitch }: Room
   };
 
   return (
-    <dialog
-      open
-      style={{ position: "fixed", inset: 0, margin: "auto", width: 380, zIndex: 10 }}
-    >
+    <dialog open style={{ position: "fixed", inset: 0, margin: "auto", width: 380, zIndex: 10 }}>
       <h2 style={{ margin: "0 0 8px" }}>Rooms</h2>
 
       <form
@@ -67,9 +64,7 @@ export function RoomSwitcher({ open, currentChannelId, onClose, onSwitch }: Room
         </button>
       </form>
 
-      {loadError && (
-        <p style={{ color: "var(--muted)", fontSize: 13 }}>couldn't load rooms: {loadError}</p>
-      )}
+      {loadError && <p style={{ color: "var(--muted)", fontSize: 13 }}>couldn't load rooms: {loadError}</p>}
       {!loadError && rooms.length === 0 && (
         <p style={{ color: "var(--muted)", fontSize: 13 }}>no other rooms yet</p>
       )}

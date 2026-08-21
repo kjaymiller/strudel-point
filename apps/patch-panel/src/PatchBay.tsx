@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
-import { compatibleDestinationRoles, isSourceRole, moduleIdOfAddress, type JackRole } from "./modules";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef } from "react";
+import { compatibleDestinationRoles, isSourceRole, type JackRole, moduleIdOfAddress } from "./modules";
 
 const HIT_RADIUS_PX = 26;
 
@@ -128,10 +128,13 @@ export function PatchBayProvider({ children, connections, onConnectionsChange }:
   const dragPathRef = useRef<SVGPathElement>(null);
   const dragStateRef = useRef<{ source: string; x: number; y: number } | null>(null);
 
-  const registerJack = useCallback((address: string, role: JackRole, capacity: number, el: HTMLElement | null) => {
-    if (el) jackMetaRef.current.set(address, { el, role, capacity });
-    else jackMetaRef.current.delete(address);
-  }, []);
+  const registerJack = useCallback(
+    (address: string, role: JackRole, capacity: number, el: HTMLElement | null) => {
+      if (el) jackMetaRef.current.set(address, { el, role, capacity });
+      else jackMetaRef.current.delete(address);
+    },
+    [],
+  );
 
   const cableKeyOf = (from: string, to: string) => `${from}->${to}`;
 

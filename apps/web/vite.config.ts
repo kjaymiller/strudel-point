@@ -1,5 +1,5 @@
-import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 // Runs as the `web` service in docker-compose.yml. `host: true` binds all interfaces
 // (not just the container's localhost) so the host port mapping in docker-compose.yml

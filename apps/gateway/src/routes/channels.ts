@@ -1,7 +1,7 @@
-import { Router } from "express";
 import type { Channel, Presence } from "@strudel-point/shared";
-import { pool } from "../db.js";
+import { Router } from "express";
 import { asyncHandler } from "../asyncHandler.js";
+import { pool } from "../db.js";
 import { listPeers, peerCounts } from "../presence.js";
 
 export const channelsRouter = Router();

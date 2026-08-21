@@ -47,11 +47,7 @@ export function PresetBar({ presets, activeName, onLoad, onSave, onDelete }: Pre
       >
         save preset
       </button>
-      <button
-        className="secondary"
-        disabled={!activeName}
-        onClick={() => activeName && onDelete(activeName)}
-      >
+      <button className="secondary" disabled={!activeName} onClick={() => activeName && onDelete(activeName)}>
         delete
       </button>
     </div>

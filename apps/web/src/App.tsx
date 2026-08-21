@@ -1,13 +1,14 @@
+import type { SliderWidgetConfig } from "@strudel/codemirror/slider.mjs";
+import { transpiler } from "@strudel/transpiler";
+import type { StrudelPattern } from "@strudel/web";
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type MouseEvent,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+  bankSampleUrls,
+  groupSampleBanks,
+  requestStemSeparation,
+  SampleEditor,
+  type SampleEditorHandle,
+  type StemResult,
+} from "@strudel-point/library";
 import type {
   AutosaveDoc,
   ChannelEvent,
@@ -17,26 +18,25 @@ import type {
   Track,
 } from "@strudel-point/shared";
 import {
-  groupSampleBanks,
-  bankSampleUrls,
-  requestStemSeparation,
-  SampleEditor,
-  type SampleEditorHandle,
-  type StemResult,
-} from "@strudel-point/library";
-import { Editor, type EditorHandle } from "./components/Editor";
-import type { SliderWidgetConfig } from "@strudel/codemirror/slider.mjs";
+  type CSSProperties,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ChannelBar } from "./components/ChannelBar";
+import { CustomSamples, playableName } from "./components/CustomSamples";
+import { Editor, type EditorHandle } from "./components/Editor";
+import { DeleteIcon, RenameIcon, SaveIcon } from "./components/Icon";
+import { LiveWaveform } from "./components/LiveWaveform";
 import { RoomSwitcher } from "./components/RoomSwitcher";
 import { SaveDialog } from "./components/SaveDialog";
 import { SoundBank, type SoundBankEntry } from "./components/SoundBank";
-import { CustomSamples, playableName } from "./components/CustomSamples";
-import { LiveWaveform } from "./components/LiveWaveform";
-import { RenameIcon, SaveIcon, DeleteIcon } from "./components/Icon";
-import { useChannelSocket } from "./ws";
 import { getStrudel } from "./strudel";
-import type { StrudelPattern } from "@strudel/web";
-import { transpiler } from "@strudel/transpiler";
+import { useChannelSocket } from "./ws";
 
 const DEFAULT_CODE = `// welcome to strudel-point — everyone here shares this buffer.
 // ctrl/cmd+enter to evaluate, ctrl/cmd+. to hush.
@@ -140,12 +140,8 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
   const [resizing, setResizing] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
-  const [error, setError] = useState<{ message: string; kind: "error" | "warning" } | null>(
-    null,
-  );
-  const [autosaveState, setAutosaveState] = useState<"idle" | "saving" | "saved" | "error">(
-    "idle",
-  );
+  const [error, setError] = useState<{ message: string; kind: "error" | "warning" } | null>(null);
+  const [autosaveState, setAutosaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const editorRef = useRef<EditorHandle>(null);
   const sampleEditorRef = useRef<SampleEditorHandle>(null);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -154,10 +150,7 @@ export default function App() {
   const reportError = useCallback((message: string) => setError({ message, kind: "error" }), []);
   // Strudel code that fails to evaluate is a problem with the user's input, not the
   // platform — surface it as a warning rather than the same red "something's broken" banner.
-  const reportWarning = useCallback(
-    (message: string) => setError({ message, kind: "warning" }),
-    [],
-  );
+  const reportWarning = useCallback((message: string) => setError({ message, kind: "warning" }), []);
 
   // The "note highlight" — every mini-notation token currently sounding lights up
   // directly in the code. `.draw()` is a self-driving requestAnimationFrame loop (see
@@ -167,9 +160,7 @@ export default function App() {
     if (!pattern) return;
     pattern.draw(
       (haps, time) => {
-        const active = haps
-          .filter((h) => h.isActive(time))
-          .flatMap((h) => h.context.locations ?? []);
+        const active = haps.filter((h) => h.isActive(time)).flatMap((h) => h.context.locations ?? []);
         editorRef.current?.setHighlightRanges(active);
       },
       { lookbehind: 0, lookahead: 0.1, id: 1 },
@@ -185,8 +176,7 @@ export default function App() {
     try {
       const { widgets } = transpiler(code);
       const sliders = widgets.filter(
-        (w): w is SliderWidgetConfig =>
-          w.type === "slider" && w.from !== undefined && w.to !== undefined,
+        (w): w is SliderWidgetConfig => w.type === "slider" && w.from !== undefined && w.to !== undefined,
       );
       editorRef.current?.updateSliders(sliders);
     } catch {
@@ -245,9 +235,7 @@ export default function App() {
           break;
         case "sample:added":
           setCustomSamples((prev) => {
-            const next = prev.some((s) => s.id === event.sample.id)
-              ? prev
-              : [event.sample, ...prev];
+            const next = prev.some((s) => s.id === event.sample.id) ? prev : [event.sample, ...prev];
             registerAllSamples(next)
               .then(() => listRegisteredSounds().then(setSoundBank))
               .catch((err) => reportError(`failed to load "${event.sample.name}": ${err}`));
@@ -289,9 +277,7 @@ export default function App() {
       fetch(`/api/channels/${channelId}/presence`)
         .then(jsonOrThrow)
         .then((presence: Presence) => {
-          setPeerIds(
-            new Set(presence.peers.map((p) => p.userId).filter((id) => id !== selfUserId)),
-          );
+          setPeerIds(new Set(presence.peers.map((p) => p.userId).filter((id) => id !== selfUserId)));
         })
         .catch((err) => reportError(`couldn't load the room roster: ${err.message}`));
     },
@@ -548,9 +534,7 @@ export default function App() {
   // "chop" / "merge & chop" in CustomSamples: hand the picked sound(s) off to the sample
   // editor to be re-decoded, (merged if more than one), and re-analyzed for cuts.
   const handleEditSamples = useCallback((samples: CustomSample[]) => {
-    sampleEditorRef.current?.loadFromSamples(
-      samples.map((s) => ({ url: s.url, label: playableName(s) })),
-    );
+    sampleEditorRef.current?.loadFromSamples(samples.map((s) => ({ url: s.url, label: playableName(s) })));
   }, []);
 
   // Feeds the sample editor's "separate into stems" button (see
@@ -695,11 +679,7 @@ export default function App() {
         onSave={() => setSaveOpen(true)}
         onOpenRooms={() => setRoomSwitcherOpen(true)}
       />
-      <div
-        className="main"
-        ref={mainRef}
-        style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
-      >
+      <div className="main" ref={mainRef} style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
         <div className="editor-pane">
           <Editor
             ref={editorRef}
@@ -732,10 +712,7 @@ export default function App() {
             >
               my sounds
             </button>
-            <button
-              className={sidebarTab === "bank" ? "active" : ""}
-              onClick={() => setSidebarTab("bank")}
-            >
+            <button className={sidebarTab === "bank" ? "active" : ""} onClick={() => setSidebarTab("bank")}>
               sound bank
             </button>
             <button
@@ -749,9 +726,7 @@ export default function App() {
           {sidebarTab === "tracks" && (
             <>
               <h2>saved tracks</h2>
-              {tracks.length === 0 && (
-                <p style={{ color: "var(--muted)", fontSize: 13 }}>none yet</p>
-              )}
+              {tracks.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>none yet</p>}
               {tracks.map((t) => (
                 <div key={t.id} className="track" onClick={() => loadTrack(t)}>
                   <div className="title">{t.title}</div>

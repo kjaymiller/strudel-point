@@ -1,7 +1,7 @@
-import { Knob } from "./Knob";
-import { EnvelopePanel } from "./EnvelopePanel";
-import { ModuleHeader } from "./ModuleHeader";
 import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
+import { EnvelopePanel } from "./EnvelopePanel";
+import { Knob } from "./Knob";
+import { ModuleHeader } from "./ModuleHeader";
 
 type PitchEnvInstance = Extract<ModuleInstance, { kind: "pitchenv" }>;
 
@@ -19,13 +19,27 @@ export function PitchEnvModuleCard({ module, onChange, onNameChange, onRemove }:
   const p = module.params;
   return (
     <section className="panel module-card">
-      <ModuleHeader kindLabel="Pitch env" name={module.name} onNameChange={onNameChange} colorId={module.id} onRemove={onRemove} />
+      <ModuleHeader
+        kindLabel="Pitch env"
+        name={module.name}
+        onNameChange={onNameChange}
+        colorId={module.id}
+        onRemove={onRemove}
+      />
       <EnvelopePanel
         moduleId={module.id}
         envelope={p}
         onChange={(env) => onChange({ ...env, amount: p.amount })}
         extra={
-          <Knob label="Amount" value={p.amount} min={-48} max={48} step={1} unit="st" onChange={(amount) => onChange({ ...p, amount })} />
+          <Knob
+            label="Amount"
+            value={p.amount}
+            min={-48}
+            max={48}
+            step={1}
+            unit="st"
+            onChange={(amount) => onChange({ ...p, amount })}
+          />
         }
         cvOutJack={{
           address: jackAddress(module.id, "pitch-mod-out"),

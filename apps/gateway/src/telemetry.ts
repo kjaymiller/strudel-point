@@ -19,10 +19,10 @@
 // that hook working, db.ts/kafka.ts/storage.ts/valkey.ts each wrap their own calls in a
 // manual span using the `tracer` exported below — see the comments there.
 import { trace } from "@opentelemetry/api";
-import { NodeSDK } from "@opentelemetry/sdk-node";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { Resource } from "@opentelemetry/resources";
+import { NodeSDK } from "@opentelemetry/sdk-node";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 
 // Shared tracer for the manual spans in db.ts/kafka.ts/storage.ts/valkey.ts (see the comment

@@ -192,7 +192,11 @@ export interface JackSpec {
  * cabled Mod pedal turns into a real modulation on whichever stage its own Target
  * control names. Factored out once since all three modules get the identical jack. */
 function envModInJack(): JackSpec {
-  return { id: "env-mod-in", role: "env-mod-in", label: "mod in <- Mod pedal out (targets whichever stage its own Target picks)" };
+  return {
+    id: "env-mod-in",
+    role: "env-mod-in",
+    label: "mod in <- Mod pedal out (targets whichever stage its own Target picks)",
+  };
 }
 
 /** Every jack this module kind exposes, always in the same order for a given kind. */
@@ -252,12 +256,18 @@ export function jacksFor(kind: ModuleKind): JackSpec[] {
     // Same cutoff-mod-out as Filter LFO, plus its own generic mod-in (its shape can be
     // modulated by a Mod pedal the same way the VCA envelope's can — see envModInJack).
     case "filterenv":
-      return [{ id: "cutoff-mod-out", role: "cutoff-mod-out", label: "out -> a VCF's cutoff mod in" }, envModInJack()];
+      return [
+        { id: "cutoff-mod-out", role: "cutoff-mod-out", label: "out -> a VCF's cutoff mod in" },
+        envModInJack(),
+      ];
     case "filterlfo":
       return [{ id: "cutoff-mod-out", role: "cutoff-mod-out", label: "out -> a VCF's cutoff mod in" }];
     // Same pitch-mod-out as Vibrato, plus its own generic mod-in.
     case "pitchenv":
-      return [{ id: "pitch-mod-out", role: "pitch-mod-out", label: "out -> a VCO's pitch mod in" }, envModInJack()];
+      return [
+        { id: "pitch-mod-out", role: "pitch-mod-out", label: "out -> a VCO's pitch mod in" },
+        envModInJack(),
+      ];
     case "vibrato":
       return [{ id: "pitch-mod-out", role: "pitch-mod-out", label: "out -> a VCO's pitch mod in" }];
     // A generic modulator, not tied to one fixed destination — cable its out to any
@@ -279,7 +289,9 @@ export function jacksFor(kind: ModuleKind): JackSpec[] {
     // so it cables into any Sequencer's trig-in the same way, but with nothing to
     // configure — one fixed pulse per cycle instead of an editable 16-step row.
     case "eos":
-      return [{ id: "gate-out", role: "gate-out", label: "out -> a Sequencer's trig in (one pulse per cycle)" }];
+      return [
+        { id: "gate-out", role: "gate-out", label: "out -> a Sequencer's trig in (one pulse per cycle)" },
+      ];
     // A submix bus — sums whatever's cabled into its audio-in (same as Output's mix bus),
     // but unlike Output it has an audio-out of its own, so several generators can share
     // one downstream ADSR/filter/FX chain before that combined signal continues on to
@@ -290,7 +302,9 @@ export function jacksFor(kind: ModuleKind): JackSpec[] {
         { id: "audio-out", role: "audio-out", label: "audio out" },
       ];
     case "output":
-      return [{ id: "audio-in", role: "audio-in", label: "audio in — the mix bus, accepts any number of cables" }];
+      return [
+        { id: "audio-in", role: "audio-in", label: "audio in — the mix bus, accepts any number of cables" },
+      ];
   }
 }
 
@@ -455,23 +469,79 @@ export type ModuleInstance =
 // Overloads so `createModule("vco", ...)` narrows to the vco branch instead of the whole
 // ModuleInstance union — lets callers (presets.ts's factory racks especially) write
 // `vco.params.waveform = ...` straight off the return value instead of casting.
-export function createModule(kind: "sequencer", id: string, name: string): Extract<ModuleInstance, { kind: "sequencer" }>;
+export function createModule(
+  kind: "sequencer",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "sequencer" }>;
 export function createModule(kind: "vco", id: string, name: string): Extract<ModuleInstance, { kind: "vco" }>;
-export function createModule(kind: "sampler", id: string, name: string): Extract<ModuleInstance, { kind: "sampler" }>;
+export function createModule(
+  kind: "sampler",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "sampler" }>;
 export function createModule(kind: "vcf", id: string, name: string): Extract<ModuleInstance, { kind: "vcf" }>;
-export function createModule(kind: "envelope", id: string, name: string): Extract<ModuleInstance, { kind: "envelope" }>;
-export function createModule(kind: "filterenv", id: string, name: string): Extract<ModuleInstance, { kind: "filterenv" }>;
-export function createModule(kind: "filterlfo", id: string, name: string): Extract<ModuleInstance, { kind: "filterlfo" }>;
-export function createModule(kind: "pitchenv", id: string, name: string): Extract<ModuleInstance, { kind: "pitchenv" }>;
-export function createModule(kind: "vibrato", id: string, name: string): Extract<ModuleInstance, { kind: "vibrato" }>;
-export function createModule(kind: "fmop", id: string, name: string): Extract<ModuleInstance, { kind: "fmop" }>;
-export function createModule(kind: "delay", id: string, name: string): Extract<ModuleInstance, { kind: "delay" }>;
-export function createModule(kind: "reverb", id: string, name: string): Extract<ModuleInstance, { kind: "reverb" }>;
-export function createModule(kind: "siggen", id: string, name: string): Extract<ModuleInstance, { kind: "siggen" }>;
+export function createModule(
+  kind: "envelope",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "envelope" }>;
+export function createModule(
+  kind: "filterenv",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "filterenv" }>;
+export function createModule(
+  kind: "filterlfo",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "filterlfo" }>;
+export function createModule(
+  kind: "pitchenv",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "pitchenv" }>;
+export function createModule(
+  kind: "vibrato",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "vibrato" }>;
+export function createModule(
+  kind: "fmop",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "fmop" }>;
+export function createModule(
+  kind: "delay",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "delay" }>;
+export function createModule(
+  kind: "reverb",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "reverb" }>;
+export function createModule(
+  kind: "siggen",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "siggen" }>;
 export function createModule(kind: "eos", id: string, name: string): Extract<ModuleInstance, { kind: "eos" }>;
-export function createModule(kind: "modpedal", id: string, name: string): Extract<ModuleInstance, { kind: "modpedal" }>;
-export function createModule(kind: "channel", id: string, name: string): Extract<ModuleInstance, { kind: "channel" }>;
-export function createModule(kind: "output", id: string, name: string): Extract<ModuleInstance, { kind: "output" }>;
+export function createModule(
+  kind: "modpedal",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "modpedal" }>;
+export function createModule(
+  kind: "channel",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "channel" }>;
+export function createModule(
+  kind: "output",
+  id: string,
+  name: string,
+): Extract<ModuleInstance, { kind: "output" }>;
 // A trailing generic overload for callers (App.tsx's addModule) that only have a plain
 // `ModuleKind` at hand, not one of the literal kinds above.
 export function createModule(kind: ModuleKind, id: string, name: string): ModuleInstance;

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Jack } from "../PatchBay";
-import { ModuleHeader } from "./ModuleHeader";
-import { getStrudelIfReady } from "../strudel";
 import { jackAddress, jackCapacity, type ModuleInstance } from "../modules";
+import { Jack } from "../PatchBay";
+import { getStrudelIfReady } from "../strudel";
+import { ModuleHeader } from "./ModuleHeader";
 
 type EosInstance = Extract<ModuleInstance, { kind: "eos" }>;
 
@@ -64,7 +64,13 @@ export function EosModuleCard({ module, onNameChange, onRemove }: EosModuleCardP
 
   return (
     <section className="panel module-card eos-panel">
-      <ModuleHeader kindLabel="EOS trigger" name={module.name} onNameChange={onNameChange} colorId={module.id} onRemove={onRemove} />
+      <ModuleHeader
+        kindLabel="EOS trigger"
+        name={module.name}
+        onNameChange={onNameChange}
+        colorId={module.id}
+        onRemove={onRemove}
+      />
       <div className="knob-row">
         <div className={`eos-pulse${pulsing ? " on" : ""}`} title="fires once per cycle" />
         <div className="jack-slot">

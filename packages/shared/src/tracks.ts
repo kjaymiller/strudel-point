@@ -51,4 +51,3 @@ export interface AutosaveDoc {
   strudelJson: StrudelJson;
   updatedAt: string;
 }
-

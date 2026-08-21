@@ -1,8 +1,9 @@
-// Sample-bank grouping — the same rule apps/web and apps/pads each independently
-// reimplemented (see their own now-superseded groupBanks/registerAllSamples helpers):
-// custom sample rows that share a `bankName` are slices of one playable Strudel bank
-// (`s("bankName:0")`, `s("bankName:1")`, ...); everything else is a standalone one-shot.
-// Centralized here so every app groups identically instead of drifting.
+// Sample-bank grouping — the same rule apps/pads' own groupBanks and apps/web's own
+// registerAllSamples still implement independently: custom sample rows that share a
+// `bankName` are slices of one playable Strudel bank (`s("bankName:0")`,
+// `s("bankName:1")`, ...); everything else is a standalone one-shot. Centralized here so
+// new callers don't have to re-derive it — see the duplicate-code audit for migrating
+// pads'/web's own copies onto this one.
 import type { CustomSample } from "@strudel-point/shared";
 
 export interface SampleBank {
