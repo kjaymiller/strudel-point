@@ -259,6 +259,49 @@ channel/room id. Open the same URL in a second tab (or another browser) to see l
 - `⌘/Ctrl + .` — hush (stop all sound in this browser)
 - **save** — writes the current buffer to Postgres as a `Track`
 
+## Running in production
+
+`docker-compose.yml` is the development stack and only that — bind-mounted source, Vite
+dev servers, `bun --watch`. `docker-compose.prod.yml` is the deployable one:
+
+```sh
+cp .env.prod.example .env    # fill in POSTGRES_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY
+docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml run --rm gateway bun scripts/migrate.js
+```
+
+Then point a TLS-terminating reverse proxy at `HTTP_PORT` (default 8088). Three things
+are genuinely different from dev, not just tuned:
+
+**One origin, one port.** `Dockerfile.static` builds all four apps as static bundles and
+serves them from a single Caddy container (`Caddyfile.prod`), which also proxies `/api`
+and `/ws` to the gateway. The gateway publishes no host port. This is why the dev
+workaround — the browser dialing the gateway's `:8787` directly for the WebSocket —
+disappears in production: that exists purely because Vite's proxy can't complete a WS
+upgrade under Bun, and there is no Vite here. Caddy proxies upgrades correctly. So
+`apps/*/src/ws.ts` defaults to same-origin whenever `import.meta.env.PROD` is set, which
+also keeps the built image hostname-agnostic — no rebuild to deploy it behind a different
+domain. `VITE_GATEWAY_WS_HOST` still overrides, for a split-origin deployment.
+
+**No default credentials.** Dev hardcodes `strudel`/`strudel` everywhere. The prod compose
+uses `${VAR:?}` for every secret, so the stack refuses to start rather than quietly
+running with a password that's published in this repo. `CORS_ORIGIN` defaults to empty,
+which the gateway reads as "same-origin, send no CORS headers at all" (see `env.ts`) —
+correct here, since the browser never makes a cross-origin request.
+
+**The gateway image is a single bundled file.** `apps/gateway/Dockerfile` runs
+`bun build --target=bun`, inlining the workspace packages and every dependency, so the
+runtime stage carries `server.js` and nothing else — no `node_modules`, no lockfile. The
+migrator is bundled alongside it (`scripts/migrate.js`) with the raw `db/migrations/*.sql`
+next to it, since that image is the only place a Postgres client exists. Every migration
+is written `if not exists`, so re-running it on each deploy is safe.
+
+Observability is deliberately absent from the prod compose — no Jaeger, no Prometheus, no
+collector. Those are dev conveniences; a real deployment usually has its own. Set
+`OTEL_EXPORTER_OTLP_ENDPOINT` to emit traces and scrape `gateway:8787/metrics` for
+metrics. Note that `/metrics` is *not* proxied through the public origin, so it stays on
+the internal network rather than sitting unauthenticated on the front door.
+
 ## Telemetry (OpenTelemetry + Jaeger)
 
 The gateway is instrumented with the OpenTelemetry Node SDK (`apps/gateway/src/telemetry.ts`,

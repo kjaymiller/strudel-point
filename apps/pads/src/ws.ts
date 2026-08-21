@@ -33,7 +33,16 @@ export function useChannelSocket({ channelId, username, onEvent, onError }: UseC
 
     function connect() {
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const gatewayHost = import.meta.env.VITE_GATEWAY_WS_HOST || `${location.hostname}:8787`;
+      // Dev and prod resolve this differently, and the reason is the Bun/Vite proxy bug
+      // documented above: in dev there is no proxy that can carry a WS upgrade, so the
+      // browser must reach the gateway's own published port directly. A production build
+      // has no Vite dev server at all — Caddy fronts the built assets and the gateway on
+      // one origin (see Caddyfile.prod) and proxies /ws itself, which it does correctly.
+      // So prod defaults to same-origin, which is also what keeps the built image
+      // hostname-agnostic: no deploy-time rebuild to bake in a domain.
+      // VITE_GATEWAY_WS_HOST still overrides both, for a split-origin deployment.
+      const defaultHost = import.meta.env.PROD ? location.host : `${location.hostname}:8787`;
+      const gatewayHost = import.meta.env.VITE_GATEWAY_WS_HOST || defaultHost;
       ws = new WebSocket(`${proto}://${gatewayHost}/ws`);
       wsRef.current = ws;
 

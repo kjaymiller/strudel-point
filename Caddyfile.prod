@@ -1,0 +1,72 @@
+# Production counterpart to ./Caddyfile (which fronts the four Vite *dev servers*).
+#
+# The difference that matters: in dev each app is a live Vite server and /api is proxied
+# by Vite itself, while /ws bypasses everything because Vite's proxy can't complete a WS
+# upgrade under Bun. Here there are no dev servers — the four apps are static bundles
+# built by Dockerfile.static, and this Caddy is the only thing in front of them. So it
+# serves the assets *and* owns both gateway paths, /api and /ws.
+#
+# That makes the whole thing one origin with no directly-published gateway port, which is
+# why apps/*/src/ws.ts defaults to same-origin in a production build (import.meta.env.PROD).
+# Caddy proxies WebSocket upgrades correctly; the Bun/Vite bug does not apply here.
+#
+# :8080, not :80, so the container needs no NET_BIND_SERVICE and can run unprivileged.
+:8080 {
+	encode zstd gzip
+
+	# ── gateway ──────────────────────────────────────────────────────────
+	# Both of these must come before the static handlers below: `handle` blocks are
+	# evaluated in order and the final catch-all would otherwise swallow them.
+	handle /api/* {
+		reverse_proxy gateway:8787
+	}
+
+	# The WebSocket. No special directives needed — reverse_proxy detects the upgrade
+	# and switches to a bidirectional stream on its own.
+	handle /ws {
+		reverse_proxy gateway:8787
+	}
+
+	# Gateway liveness, exposed so an external monitor can probe the backend through
+	# the same origin rather than needing to reach the gateway container directly.
+	handle /healthz {
+		reverse_proxy gateway:8787
+	}
+
+	# /metrics is deliberately NOT proxied. Prometheus scrapes gateway:8787/metrics
+	# over the internal network; publishing it through the public origin would put
+	# process-level metrics behind no auth.
+
+	# ── static apps ──────────────────────────────────────────────────────
+	# Each was built with `base` set to its own prefix (see the BASE_PATH args in
+	# Dockerfile.static and apps/*/vite.config.ts), so its asset URLs already carry
+	# that prefix — strip_prefix takes it back off to find the file on disk.
+	# try_files falls back to index.html so a deep link still boots the SPA.
+	handle /dj* {
+		root * /srv/dj
+		uri strip_prefix /dj
+		try_files {path} /index.html
+		file_server
+	}
+
+	handle /pads* {
+		root * /srv/pads
+		uri strip_prefix /pads
+		try_files {path} /index.html
+		file_server
+	}
+
+	handle /patch* {
+		root * /srv/patch
+		uri strip_prefix /patch
+		try_files {path} /index.html
+		file_server
+	}
+
+	# The main editor, at the root. Built with no BASE_PATH, so no prefix to strip.
+	handle {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+}

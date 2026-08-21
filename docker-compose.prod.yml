@@ -1,0 +1,157 @@
+# Production stack. The sibling docker-compose.yml is the development one — bind-mounted
+# source, Vite dev servers, `bun --watch`, and a published gateway port the browser talks
+# to directly. Nothing here bind-mounts source or reloads.
+#
+# The two structural differences from dev:
+#
+#   1. One origin, one port. `caddy` serves the four apps as static bundles and proxies
+#      /api and /ws to the gateway (see Caddyfile.prod). The gateway publishes no host
+#      port at all — the dev workaround where the browser dials :8787 directly exists
+#      only because Vite's proxy can't carry a WS upgrade under Bun, and there is no Vite
+#      here. Put a TLS-terminating reverse proxy in front of :8088 and you're done.
+#
+#   2. Credentials are not baked in. Dev hardcodes strudel/strudel; here every secret
+#      comes from the environment and the stack refuses to start without it (the
+#      `${VAR:?...}` form below), so there is no accidental default password in
+#      production. Copy .env.prod.example to .env and fill it in.
+#
+# Observability is deliberately not included: no Jaeger, no Prometheus, no collector.
+# Those are dev conveniences in docker-compose.yml; a real deployment almost always
+# already has its own. Point OTEL_EXPORTER_OTLP_ENDPOINT at your collector to emit traces
+# (telemetry.ts no-ops when it's unset) and scrape gateway:8787/metrics for metrics.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml run --rm gateway bun scripts/migrate.js
+
+services:
+  kafka:
+    image: apache/kafka:3.7.0
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      CLUSTER_ID: strudelpointkraftcluster1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: strudel_point
+      POSTGRES_USER: strudel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U strudel -d strudel_point"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Object storage for uploaded sample audio. Verified against rustfs 1.0.0-rc.3 rather
+  # than guessed (which is what the dev compose's entry still flags): the credential env
+  # vars really are RUSTFS_ACCESS_KEY / RUSTFS_SECRET_KEY, the data path is RUSTFS_VOLUMES
+  # (/data), and /health/ready is a real unauthenticated 200 — so the exit-code-4 wget
+  # dance the dev healthcheck does is unnecessary here.
+  #
+  # Pinned to an -rc tag because that is the newest RustFS has published; it has not cut
+  # a stable 1.0.0. Worth knowing before storing anything you can't lose — though here
+  # the bytes are 24h-TTL scratch by design (see storage.ts).
+  rustfs:
+    image: rustfs/rustfs:1.0.0-rc.3
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY}
+    volumes:
+      - rustfs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9000/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Presence + autosave buffer. No volume and no persistence, deliberately — see the
+  # Valkey section of README.md: nothing in here is a system of record.
+  valkey:
+    image: valkey/valkey:8.1.7-alpine
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  spleeter:
+    build:
+      context: apps/spleeter
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8100/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    restart: unless-stopped
+    # No `ports:` — caddy is the only way in. See the header.
+    environment:
+      DATABASE_URL: postgres://strudel:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/strudel_point
+      KAFKA_BROKERS: kafka:9092
+      S3_ENDPOINT: rustfs
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY}
+      VALKEY_URL: valkey://valkey:6379
+      SPLEETER_URL: http://spleeter:8100
+      # Same-origin in production: the browser reaches /api through caddy, from the very
+      # origin the page was served by, so no cross-origin request is ever made. Dev's
+      # "*" existed because Vite's proxy sat on a different port.
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      OTEL_SERVICE_NAME: strudel-point-gateway
+      # Unset by default — telemetry.ts no-ops rather than failing requests against a
+      # collector that isn't there.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      rustfs: { condition: service_healthy }
+      # service_started for both, same reasoning as the dev compose: the gateway is
+      # written to run degraded without valkey, and stem separation is one optional
+      # feature that shouldn't hold up the rest of the app.
+      valkey: { condition: service_started }
+      spleeter: { condition: service_started }
+
+  caddy:
+    build:
+      context: .
+      dockerfile: Dockerfile.static
+    restart: unless-stopped
+    # The one published port: the four apps plus /api and /ws, on one origin.
+    ports:
+      - "${HTTP_PORT:-8088}:8080"
+    depends_on:
+      gateway: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  kafka-data:
+  rustfs-data:

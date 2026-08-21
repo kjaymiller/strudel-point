@@ -1,0 +1,71 @@
+# Production image for the four browser apps: builds web, dj, pads and patch-panel as
+# static bundles and serves all of them, plus the gateway's /api and /ws, from one Caddy
+# origin (see Caddyfile.prod).
+#
+# One image rather than four, because these apps are already designed to sit behind a
+# single Caddy origin (./Caddyfile does the same for the dev servers) and a static bundle
+# has no running process of its own — four containers would be four copies of Caddy
+# serving one directory each, for no isolation benefit.
+#
+# It lives at the repo root, not under apps/, because its build context genuinely is the
+# whole workspace: all four apps plus both shared packages.
+
+# ── deps ─────────────────────────────────────────────────────────────────────
+# Manifests only — see apps/gateway/Dockerfile for why every workspace manifest has to
+# be copied here even though this stage builds only some of them.
+FROM oven/bun:1.3.14 AS deps
+WORKDIR /app
+COPY package.json bun.lock bunfig.toml ./
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/library/package.json packages/library/package.json
+COPY apps/gateway/package.json apps/gateway/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY apps/dj/package.json apps/dj/package.json
+COPY apps/pads/package.json apps/pads/package.json
+COPY apps/patch-panel/package.json apps/patch-panel/package.json
+RUN bun install --frozen-lockfile
+
+# ── build ────────────────────────────────────────────────────────────────────
+FROM deps AS build
+WORKDIR /app
+COPY packages packages
+COPY apps/web apps/web
+COPY apps/dj apps/dj
+COPY apps/pads apps/pads
+COPY apps/patch-panel apps/patch-panel
+
+# Each app's `build` script is `tsc -b && vite build`, so these typecheck as they go.
+#
+# BASE_PATH is read by apps/{dj,pads,patch-panel}/vite.config.ts and becomes Vite's
+# `base`, so every asset URL in the built index.html carries the prefix Caddy serves it
+# under. web gets no BASE_PATH — it lives at the root.
+#
+# Note what is NOT set here: VITE_GATEWAY_WS_HOST. A production build defaults to
+# same-origin (apps/*/src/ws.ts), so this image carries no hostname and the same build
+# works behind any domain. Baking one in would make the image deploy-specific.
+RUN bun run --filter @strudel-point/web build
+RUN BASE_PATH=/dj/ bun run --filter @strudel-point/dj build
+RUN BASE_PATH=/pads/ bun run --filter @strudel-point/pads build
+RUN BASE_PATH=/patch/ bun run --filter @strudel-point/patch-panel build
+
+# ── runtime ──────────────────────────────────────────────────────────────────
+FROM caddy:2.11.4-alpine AS runtime
+
+COPY Caddyfile.prod /etc/caddy/Caddyfile
+COPY --from=build /app/apps/web/dist /srv/web
+COPY --from=build /app/apps/dj/dist /srv/dj
+COPY --from=build /app/apps/pads/dist /srv/pads
+COPY --from=build /app/apps/patch-panel/dist /srv/patch
+
+# Caddy writes its config/data under $XDG_*; point them somewhere a non-root user owns.
+# There is no TLS state to keep here (TLS terminates upstream), so this is scratch space.
+ENV XDG_CONFIG_HOME=/tmp/caddy-config XDG_DATA_HOME=/tmp/caddy-data
+
+# Unprivileged: the Caddyfile binds :8080, so no capability to bind a low port is needed.
+USER 1000:1000
+EXPOSE 8080
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=5 \
+  CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
+
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

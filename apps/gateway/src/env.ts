@@ -21,7 +21,15 @@ export const env = {
   kafkaSsl: process.env.KAFKA_SSL === "true",
   kafkaSaslUsername: process.env.KAFKA_SASL_USERNAME,
   kafkaSaslPassword: process.env.KAFKA_SASL_PASSWORD,
-  corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:5173",
+  // Three states, not two. Unset means the dev default below. A non-empty value is an
+  // origin allowlist. An *explicitly empty* value means "same-origin deployment — send no
+  // CORS headers at all", which is `false` to the cors middleware and is what
+  // docker-compose.prod.yml defaults to: there, caddy serves the apps and proxies /api
+  // from one origin, so the browser never makes a cross-origin request and an allowlist
+  // would only be a way to accidentally widen access. Note `??` alone can't express this
+  // — an empty string isn't nullish, so it would configure cors with "" and silently
+  // match nothing.
+  corsOrigin: process.env.CORS_ORIGIN === "" ? false : (process.env.CORS_ORIGIN ?? "http://localhost:5173"),
 
   // Custom-sample audio bytes (see storage.ts) — local docker-compose RustFS by default.
   // RustFS speaks the plain S3 API, so the same client works against any other
