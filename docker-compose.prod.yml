@@ -102,7 +102,13 @@ services:
       context: apps/spleeter
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8100/health || exit 1"]
+      # python3, not wget/curl: the spleeter image is python:3.11-slim underneath and
+      # ships NEITHER http client, so the wget form this replaces could only ever exit
+      # 127 ("wget: not found"). The container reported `unhealthy` for its entire life
+      # while /health answered 200 the whole time — and because compose's depends_on can
+      # gate on health, a probe that can never pass is worse than no probe at all.
+      # Python is guaranteed here: it is what the service itself runs on.
+      test: ["CMD", "python3", "-c", "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:8100/health', timeout=4).status == 200 else 1)"]
       interval: 10s
       timeout: 5s
       retries: 10
