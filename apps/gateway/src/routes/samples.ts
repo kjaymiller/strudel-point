@@ -1,4 +1,4 @@
-import type { CustomSample } from "@strudel-point/shared";
+import { type CustomSample, sampleAudioUrl } from "@strudel-point/shared";
 import { Router } from "express";
 import multer from "multer";
 import { asyncHandler } from "../asyncHandler.js";
@@ -16,6 +16,9 @@ export const NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
 // Exported for routes/stems.ts — stem separation inserts custom_samples rows through the
 // exact same shape, so it reuses this mapper rather than drifting its own copy.
+//
+// The url comes from shared's sampleAudioUrl() so it carries a `?v=` version stamp — see
+// that function for why an unstamped URL served stale audio after every edit.
 export function rowToSample(row: any): CustomSample {
   return {
     id: row.id,
@@ -25,7 +28,7 @@ export function rowToSample(row: any): CustomSample {
     mimeType: row.mime_type,
     sizeBytes: row.size_bytes,
     createdAt: row.created_at,
-    url: `/api/samples/${row.id}/audio`,
+    url: sampleAudioUrl(row.id, row.created_at),
     bankName: row.bank_name ?? undefined,
     bankIndex: row.bank_index ?? undefined,
   };
