@@ -9,13 +9,19 @@ import {
   type SampleEditorHandle,
   type StemResult,
 } from "@strudel-point/library";
-import type {
-  AutosaveDoc,
-  ChannelEvent,
-  CustomSample,
-  Presence,
-  StrudelJson,
-  Track,
+import {
+  type AutosaveDoc,
+  appendCommented,
+  bytesToSequence,
+  CHAT_HISTORY_LIMIT,
+  type ChannelEvent,
+  type ChatRequest,
+  type ChatStatus,
+  type ChatTurn,
+  type CustomSample,
+  type Presence,
+  type StrudelJson,
+  type Track,
 } from "@strudel-point/shared";
 import {
   type CSSProperties,
@@ -28,6 +34,7 @@ import {
   useState,
 } from "react";
 import { ChannelBar } from "./components/ChannelBar";
+import { type ChatLine, ChatPanel } from "./components/ChatPanel";
 import { CustomSamples, playableName } from "./components/CustomSamples";
 import { Editor, type EditorHandle } from "./components/Editor";
 import { DeleteIcon, RenameIcon, SaveIcon } from "./components/Icon";
@@ -35,7 +42,13 @@ import { LiveWaveform } from "./components/LiveWaveform";
 import { RoomSwitcher } from "./components/RoomSwitcher";
 import { SaveDialog } from "./components/SaveDialog";
 import { SoundBank, type SoundBankEntry } from "./components/SoundBank";
-import { getStrudel } from "./strudel";
+import {
+  getStrudel,
+  insecureContextWarning,
+  isStrudelProblem,
+  STRUDEL_LOG_EVENT,
+  type StrudelLogDetail,
+} from "./strudel";
 import { useChannelSocket } from "./ws";
 
 const DEFAULT_CODE = `// welcome to strudel-point — everyone here shares this buffer.
@@ -43,7 +56,20 @@ const DEFAULT_CODE = `// welcome to strudel-point — everyone here shares this 
 s("bd hh sd hh")`;
 
 const AUTOSAVE_DEBOUNCE_MS = 3000;
-type SidebarTab = "tracks" | "sounds" | "bank" | "instruments";
+type SidebarTab = "tracks" | "chat" | "sounds" | "bank" | "instruments";
+
+/**
+ * Ceiling on a file dropped into the chat panel. bytesToSequence is O(n) over every byte, and
+ * the whole file has to be read into memory first — well past this and the tab stalls on the
+ * read, long before the sonification itself costs anything.
+ */
+const MAX_SONIFY_FILE_BYTES = 32 * 1024 * 1024;
+
+let chatLineSeq = 0;
+function chatLine(line: Omit<ChatLine, "id" | "ts">): ChatLine {
+  chatLineSeq += 1;
+  return { ...line, id: `${Date.now()}-${chatLineSeq}`, ts: Date.now() };
+}
 
 const SIDEBAR_WIDTH_KEY = "strudel-point:sidebarWidth";
 const DEFAULT_SIDEBAR_WIDTH = 260;
@@ -137,6 +163,13 @@ export default function App() {
   const sampleBank = useMemo(() => soundBank.filter((s) => s.type !== "synth"), [soundBank]);
   const instrumentBank = useMemo(() => soundBank.filter((s) => s.type === "synth"), [soundBank]);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("tracks");
+  const [chatLines, setChatLines] = useState<ChatLine[]>([]);
+  const [chatStatus, setChatStatus] = useState<ChatStatus | null>(null);
+  const [botThinking, setBotThinking] = useState(false);
+  // The transcript, readable from a callback that must not re-create itself every time a
+  // line lands — the send handler needs the *current* history, not the render's snapshot.
+  const chatLinesRef = useRef<ChatLine[]>([]);
+  chatLinesRef.current = chatLines;
   const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
   const [resizing, setResizing] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -194,9 +227,39 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  // Last-resort net: anything that throws/rejects outside a path we explicitly wrapped
-  // (e.g. deep inside @strudel/web's audio scheduling) still surfaces here instead of
-  // vanishing into the browser console.
+  // Whether audio can work at all here is knowable before anyone presses play, so it is
+  // said on load rather than surfacing later as a ReferenceError naming a browser internal.
+  useEffect(() => {
+    const warning = insecureContextWarning();
+    if (warning) reportWarning(warning);
+  }, [reportWarning]);
+
+  // Errors Strudel raises while a pattern is *playing*.
+  //
+  // These do not reach the two nets below, and that is not a subtlety — it is the whole
+  // reason this exists. handleEvaluate catches what `evaluate()` throws, and the window
+  // handlers catch what nothing caught; but a pattern that builds fine and then fails when
+  // the scheduler queries it (`sound.partial(...)` is not a function, a control gets a bad
+  // value) throws inside cyclist's own loop, which catches it itself and logs it
+  // (cyclist.mjs:79). Nothing propagates, nothing rejects, and the only trace is a line in
+  // the browser console — so the person who has to fix the pattern is the one person who
+  // cannot see what is wrong with it. Strudel dispatches every log line as a DOM event for
+  // exactly this reason; the app just wasn't listening.
+  useEffect(() => {
+    const onStrudelLog = (event: Event) => {
+      const detail = (event as CustomEvent<StrudelLogDetail>).detail;
+      if (!isStrudelProblem(detail)) return;
+      // Already prefixed by Strudel as e.g. "[cyclist] error: ...", so it says where from.
+      reportWarning(detail.message);
+    };
+    document.addEventListener(STRUDEL_LOG_EVENT, onStrudelLog);
+    return () => document.removeEventListener(STRUDEL_LOG_EVENT, onStrudelLog);
+  }, [reportWarning]);
+
+  // Last-resort net: anything that throws/rejects outside a path we explicitly wrapped and
+  // that Strudel did not catch for itself (see the effect above — its scheduler swallows
+  // its own errors, so this net never sees them) still surfaces here instead of vanishing
+  // into the browser console.
   useEffect(() => {
     const onError = (e: ErrorEvent) => reportError(e.message);
     const onRejection = (e: PromiseRejectionEvent) =>
@@ -256,6 +319,20 @@ export default function App() {
             return next;
           });
           break;
+        case "chat:message":
+          // Every client in the room receives this, the bot's replies included (the gateway
+          // publishes those to the same topic), so nobody's transcript is assembled from a
+          // different source than anybody else's.
+          setChatLines((prev) => [
+            ...prev,
+            chatLine({
+              author: event.author,
+              username: event.username,
+              body: event.body,
+              toolsUsed: event.toolsUsed,
+            }),
+          ]);
+          break;
         case "hush":
           getStrudel()
             .then((s) => s.hush())
@@ -298,6 +375,10 @@ export default function App() {
   // peer list, its buffer — would otherwise bleed into the new one.
   useEffect(() => {
     setPeerIds(new Set());
+    // The transcript is per-room and lives only in this tab (see the gateway's chat.ts for
+    // why nothing stores it) — carrying it into the next room would be showing one room's
+    // conversation to another.
+    setChatLines([]);
     editorRef.current?.applyRemoteContent(DEFAULT_CODE);
 
     fetch(`/api/channels/${channelId}/tracks`)
@@ -324,6 +405,24 @@ export default function App() {
       })
       .catch((err) => reportError(`couldn't load channel sounds: ${err.message}`));
   }, [channelId, reportError]);
+
+  // Whether the gateway has an ANTHROPIC_API_KEY at all. Asked once, not per message, so the
+  // panel can render "the bot is off" as a state instead of letting someone type into a void.
+  useEffect(() => {
+    fetch("/api/chat/status")
+      .then(jsonOrThrow)
+      .then(setChatStatus)
+      // A gateway too old to know this route is the same situation as one with no key: no
+      // bot. Reporting it as such keeps the panel usable as plain room chat.
+      .catch(() =>
+        setChatStatus({
+          enabled: false,
+          provider: "anthropic",
+          model: "",
+          reason: "the gateway didn't answer",
+        }),
+      );
+  }, []);
 
   // Populate the sound bank once the default pack finishes loading, even if the channel
   // has no custom samples (the branch above would otherwise be the only place this runs).
@@ -399,6 +498,93 @@ export default function App() {
     }
     send({ type: "hush", paneId: "main" });
   }, [send, reportError]);
+
+  const handleChatSend = useCallback(
+    async (message: string) => {
+      // Two independent hops, in this order. The socket send is what puts the message in
+      // front of the other humans; the POST is what asks the bot. Someone typing in a room
+      // with no API key still gets the first half, which is why chat isn't gated on the bot.
+      setChatLines((prev) => [...prev, chatLine({ author: "user", username, body: message })]);
+      send({ type: "chat:message", body: message, username, author: "user" });
+      if (!chatStatus?.enabled) return;
+
+      // Everything already on screen, minus our own local narration — a "sonified foo.png"
+      // line is not a turn anybody took, and sending it as one invites the bot to answer it.
+      const history: ChatTurn[] = chatLinesRef.current
+        .filter((line) => line.author !== "system")
+        .slice(-CHAT_HISTORY_LIMIT)
+        .map((line) => ({
+          role: line.author === "bot" ? "assistant" : "user",
+          content: line.body,
+          username: line.username,
+        }));
+
+      setBotThinking(true);
+      try {
+        const body: ChatRequest = { message, username, history };
+        // The reply is deliberately dropped on the floor here: it arrives as a chat:message
+        // event like everyone else's copy, so rendering the response body too would double it.
+        await fetch(`/api/channels/${channelId}/chat`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }).then(jsonOrThrow);
+      } catch (err) {
+        setChatLines((prev) => [
+          ...prev,
+          chatLine({
+            author: "system",
+            username: "",
+            body: `the bot couldn't answer: ${err instanceof Error ? err.message : err}`,
+          }),
+        ]);
+      } finally {
+        setBotThinking(false);
+      }
+    },
+    [channelId, username, send, chatStatus],
+  );
+
+  /**
+   * A file dropped on the chat panel is sonified and **appended to the bottom of the buffer,
+   * commented out**.
+   *
+   * Not written as the pattern, which is what this used to do. The buffer is shared and
+   * probably playing: replacing it means someone else's work disappears mid-session because
+   * a third person dropped a PNG on a chat panel. Commented, the drop changes nothing about
+   * what the room hears — it arrives as material, and whoever wants it uncomments it.
+   *
+   * The bytes never leave the browser: bytesToSequence is a pure function in
+   * @strudel-point/shared, so a 30MB drop costs one local pass and a doc:update, not an
+   * upload. The bot reads the result the same way everyone else does, since get_pattern
+   * returns the whole buffer, comments included.
+   */
+  const handleChatDropFile = useCallback(
+    async (file: File) => {
+      if (file.size > MAX_SONIFY_FILE_BYTES) {
+        reportWarning(`"${file.name}" is too big to sonify (limit ${MAX_SONIFY_FILE_BYTES} bytes)`);
+        return;
+      }
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const pattern = bytesToSequence(bytes, { label: file.name });
+
+        const next = appendCommented(editorRef.current?.getCode() ?? "", pattern.code);
+
+        editorRef.current?.applyRemoteContent(next);
+        // applyRemoteContent deliberately doesn't fire onLocalChange (see Editor.tsx), so
+        // the broadcast and the autosave debounce have to be kicked off by hand here.
+        handleLocalChange(next);
+
+        const summary = `sonified "${file.name}" (${pattern.bytesRead} bytes) — ${pattern.steps.length} steps, values 0..${pattern.range - 1}, appended to the bottom of the buffer commented out`;
+        setChatLines((prev) => [...prev, chatLine({ author: "user", username, body: summary })]);
+        send({ type: "chat:message", body: summary, username, author: "user" });
+      } catch (err) {
+        reportError(`couldn't sonify "${file.name}": ${err instanceof Error ? err.message : err}`);
+      }
+    },
+    [handleLocalChange, send, username, reportError, reportWarning],
+  );
 
   const handleSave = useCallback(
     async (title: string) => {
@@ -706,6 +892,9 @@ export default function App() {
             >
               tracks
             </button>
+            <button className={sidebarTab === "chat" ? "active" : ""} onClick={() => setSidebarTab("chat")}>
+              chat
+            </button>
             <button
               className={sidebarTab === "sounds" ? "active" : ""}
               onClick={() => setSidebarTab("sounds")}
@@ -761,6 +950,19 @@ export default function App() {
                   </div>
                 </div>
               ))}
+            </>
+          )}
+
+          {sidebarTab === "chat" && (
+            <>
+              <h2>room chat{chatStatus?.enabled ? ` · strudelbot (${chatStatus.model})` : ""}</h2>
+              <ChatPanel
+                status={chatStatus}
+                lines={chatLines}
+                thinking={botThinking}
+                onSend={handleChatSend}
+                onDropFile={handleChatDropFile}
+              />
             </>
           )}
 

@@ -17,7 +17,9 @@
     "typecheck": "bun run --filter '*' typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify": "bun run check && bun run typecheck && bun run test"
+    "verify": "bun run check && bun run typecheck && bun run test",
+    "build:strudel-api": "bun scripts/build-strudel-api.ts",
+    "build:strudel-vocab": "bun scripts/build-strudel-vocab.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.9",

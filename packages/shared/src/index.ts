@@ -1,4 +1,6 @@
+export * from "./bytes.js";
 export * from "./channels.js";
+export * from "./chat.js";
 export * from "./events.js";
 export * from "./samples.js";
 export * from "./tracks.js";

@@ -273,6 +273,8 @@ body {
 
 .sidebar-tabs {
   display: flex;
+  /* Five tabs don't fit across a 200px sidebar; wrapping beats shrinking them to initials. */
+  flex-wrap: wrap;
   gap: 4px;
   margin-bottom: 12px;
 }
@@ -542,4 +544,99 @@ dialog input {
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 6px;
+}
+
+/* --- room chat + strudelbot (components/ChatPanel.tsx) --- */
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* The panel is a drop target over its whole area, so it needs a floor even when empty. */
+  min-height: 320px;
+}
+
+.chat.dragover {
+  outline: 1px dashed var(--accent);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+.chat-transcript {
+  flex: 1;
+  min-height: 200px;
+  max-height: 45vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.chat-empty,
+.chat-notice,
+.chat-hint {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.chat-line {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  /* Bot replies quote sound and pattern names; a file name has to survive verbatim. */
+  overflow-wrap: anywhere;
+}
+
+.chat-line--bot {
+  border-color: var(--accent);
+}
+
+.chat-line--system {
+  border-style: dashed;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.chat-who {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.chat-body {
+  white-space: pre-wrap;
+}
+
+.chat-tools {
+  font-size: 10px;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+}
+
+.chat-compose {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.chat-compose textarea {
+  flex: 1;
+  resize: vertical;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.chat-compose textarea:focus {
+  outline: none;
+  border-color: var(--accent);
 }

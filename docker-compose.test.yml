@@ -1,0 +1,29 @@
+# Local test stack. Layered on docker-compose.prod.yml, NOT docker-compose.yml — the dev
+# stack bind-mounts source and hardcodes the password `strudel`, so it proves nothing
+# about what actually ships.
+#
+# Runs as its own compose project (`-p strudel-test`) so it shares nothing with a real
+# deployment: separate containers, separate Postgres volume, separate Kafka volume,
+# separate network. Point it at the same object storage if you like, but give it its own
+# S3_BUCKET so test uploads never land beside real ones.
+#
+#   docker compose -p strudel-test \
+#     -f docker-compose.prod.yml -f docker-compose.test.yml \
+#     --env-file .env \
+#     --env-file .env.strudel-test \
+#     up -d --build
+#
+# Two env files: the first supplies the credentials a real deployment already has
+# (POSTGRES_PASSWORD, S3_*), the second overrides what should differ for a test run.
+# `docker compose --env-file` takes the last assignment of a repeated key.
+
+services:
+  gateway:
+    environment:
+      # docker-compose.prod.yml pins S3_PORT 443 / S3_USE_SSL true because it assumes
+      # Wasabi. Object storage here is the RustFS instance on the Zima, plain HTTP on
+      # 9000 — encrypted in transit by the tailnet rather than by TLS. Same reasoning as
+      # a deployment override for self-hosted storage — but those also tend to carry
+      # ingress labels, bind mounts and fixed container names, none of which belong here.
+      S3_PORT: ${S3_PORT:-9000}
+      S3_USE_SSL: ${S3_USE_SSL:-false}

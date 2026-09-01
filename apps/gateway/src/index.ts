@@ -21,6 +21,7 @@ import { dropPeer, touchPeer } from "./presence.js";
 import { broadcastToChannel, type Client, findClient, joinRoom, leaveRoom } from "./rooms.js";
 import { autosaveRouter } from "./routes/autosave.js";
 import { channelsRouter } from "./routes/channels.js";
+import { chatRouter } from "./routes/chat.js";
 import { samplesRouter } from "./routes/samples.js";
 import { stemsRouter } from "./routes/stems.js";
 import { tracksRouter } from "./routes/tracks.js";
@@ -53,6 +54,7 @@ app.use("/api", autosaveRouter);
 app.use("/api", samplesRouter);
 app.use("/api", stemsRouter);
 app.use("/api", channelsRouter);
+app.use("/api", chatRouter);
 
 // Catches everything asyncHandler forwards, plus sync throws and unknown-route 404s
 // that Express falls through to. Every /api response is guaranteed JSON from here on —

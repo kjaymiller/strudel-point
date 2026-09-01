@@ -62,28 +62,11 @@ services:
       timeout: 5s
       retries: 10
 
-  # Object storage for uploaded sample audio. Verified against rustfs 1.0.0-rc.3 rather
-  # than guessed (which is what the dev compose's entry still flags): the credential env
-  # vars really are RUSTFS_ACCESS_KEY / RUSTFS_SECRET_KEY, the data path is RUSTFS_VOLUMES
-  # (/data), and /health/ready is a real unauthenticated 200 — so the exit-code-4 wget
-  # dance the dev healthcheck does is unnecessary here.
-  #
-  # Pinned to an -rc tag because that is the newest RustFS has published; it has not cut
-  # a stable 1.0.0. Worth knowing before storing anything you can't lose — though here
-  # the bytes are 24h-TTL scratch by design (see storage.ts).
-  rustfs:
-    image: rustfs/rustfs:1.0.0-rc.3
-    restart: unless-stopped
-    environment:
-      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY}
-      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY}
-    volumes:
-      - rustfs-data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9000/health/ready || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+  # There is no object-storage service here. Sample audio goes to Wasabi, configured on
+  # the gateway below — this stack used to run a RustFS container, which meant the one
+  # piece of user-uploaded data in the system lived on a single unreplicated Docker
+  # volume, on a server-release RustFS had not yet cut a stable 1.0.0 for. Dev still runs
+  # the container (docker-compose.yml), so nothing about local work needs an account.
 
   # Presence + autosave buffer. No volume and no persistence, deliberately — see the
   # Valkey section of README.md: nothing in here is a system of record.
@@ -123,11 +106,34 @@ services:
     environment:
       DATABASE_URL: postgres://strudel:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/strudel_point
       KAFKA_BROKERS: kafka:9092
-      S3_ENDPOINT: rustfs
+      # Wasabi. The endpoint host is region-scoped and must agree with S3_REGION —
+      # s3.eu-central-1.wasabisys.com is *not* reachable with region us-east-1.
+      S3_ENDPOINT: ${S3_ENDPOINT:?set S3_ENDPOINT}
+      S3_REGION: ${S3_REGION:?set S3_REGION}
+      S3_PORT: "443"
+      S3_USE_SSL: "true"
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET:?set S3_BUCKET}
+      # Default off: the bucket and its expiry rule are yours to create in the Wasabi
+      # console, so a key scoped to just that bucket is enough. Set true only if this
+      # key can also CreateBucket/PutBucketLifecycle. See connectStorage in storage.ts.
+      S3_PROVISION: ${S3_PROVISION:-false}
       VALKEY_URL: valkey://valkey:6379
       SPLEETER_URL: http://spleeter:8100
+      # The in-room chatbot (apps/gateway/src/chat/). Nothing configured, no bot — the chat
+      # panel still works as plain room chat and file drops still sonify, they just go
+      # unanswered. Default provider is Claude; set CHAT_PROVIDER=openai-compatible plus
+      # CHAT_BASE_URL to run the same room tools against Ollama/vLLM/LM Studio/OpenAI.
+      CHAT_PROVIDER: ${CHAT_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CHAT_MODEL: ${CHAT_MODEL:-}
+      CHAT_BASE_URL: ${CHAT_BASE_URL:-}
+      CHAT_API_KEY: ${CHAT_API_KEY:-}
+      # Reasoning models spend most of a turn on tokens nobody in the room sees. Set true
+      # against a server whose chat template reads `enable_thinking` (vLLM, MLX, Ollama on
+      # the Qwen family); a server that does not know the field may reject the request.
+      CHAT_DISABLE_THINKING: ${CHAT_DISABLE_THINKING:-false}
       # Same-origin in production: the browser reaches /api through caddy, from the very
       # origin the page was served by, so no cross-origin request is ever made. Dev's
       # "*" existed because Vite's proxy sat on a different port.
@@ -137,14 +143,13 @@ services:
       # collector that isn't there.
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
-      kafka: { condition: service_healthy }
-      postgres: { condition: service_healthy }
-      rustfs: { condition: service_healthy }
+      kafka: {condition: service_healthy}
+      postgres: {condition: service_healthy}
       # service_started for both, same reasoning as the dev compose: the gateway is
       # written to run degraded without valkey, and stem separation is one optional
       # feature that shouldn't hold up the rest of the app.
-      valkey: { condition: service_started }
-      spleeter: { condition: service_started }
+      valkey: {condition: service_started}
+      spleeter: {condition: service_started}
 
   caddy:
     build:
@@ -155,9 +160,8 @@ services:
     ports:
       - "${HTTP_PORT:-8088}:8080"
     depends_on:
-      gateway: { condition: service_healthy }
+      gateway: {condition: service_healthy}
 
 volumes:
   pgdata:
   kafka-data:
-  rustfs-data:

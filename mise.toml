@@ -6,7 +6,7 @@ description = "Install JS dependencies (for host-side editor/tsc support — con
 run = "bun install"
 
 [tasks."docker:up"]
-description = "Build + start everything: Kafka, Postgres, RustFS, gateway, web"
+description = "Build + start everything: Kafka, Postgres, Valkey, gateway, web"
 run = "docker compose up -d --build"
 
 [tasks."docker:down"]

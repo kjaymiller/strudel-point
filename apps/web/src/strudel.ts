@@ -170,3 +170,83 @@ export async function getSampleBufferForName(name: string, n = 0): Promise<Audio
   if (!url) return null;
   return strudel.loadBuffer(url, strudel.getAudioContext(), name, n);
 }
+
+/**
+ * The DOM event Strudel dispatches every log line on (`logger.key` in
+ * @strudel/core/logger.mjs), carrying `{ message, type, data }` on `detail`.
+ *
+ * This is the *only* channel for errors raised while a pattern is playing. `evaluate()`
+ * throws synchronously for code that fails to build, and App.tsx catches that — but a
+ * pattern that builds and then fails when the scheduler queries it (`sound.partial(...)`
+ * is undefined; a control gets a bad value) throws inside cyclist's own loop, which
+ * catches it and calls errorLogger (cyclist.mjs:79). Nothing propagates to the caller.
+ *
+ * Left unlistened-for, those errors reach the browser console and nowhere else, so the
+ * person who has to fix the pattern is the one person who can't see what's wrong with it.
+ */
+export const STRUDEL_LOG_EVENT = "strudel.log";
+
+export interface StrudelLogDetail {
+  message: string;
+  type?: "error" | "warning" | string;
+  data?: unknown;
+}
+
+/**
+ * Progress messages Strudel puts on the log channel. Everything here is normal operation.
+ *
+ * This is an allow-list on purpose, and the direction matters. The obvious way round is to
+ * match the problems — but Strudel's problems mostly carry no `type` at all and share no
+ * common wording:
+ *
+ *   [cyclist] error: sound.partial is not a function     (no type)
+ *   [voicing]: unknown chord "Zz9"                       (no type, pattern goes silent)
+ *   [core] Modulation type undefined not found...        (no type)
+ *   [warn]: Can't do arithmetic on control pattern.      (no type)
+ *
+ * A list of problem phrases would have missed three of those four, and would keep missing
+ * whatever wording the next Strudel release introduces — failing closed, silently, which is
+ * the exact bug this whole listener exists to fix. Listing the handful of stable, benign
+ * messages instead means a new kind of error is surfaced by default and the worst case is a
+ * banner too many.
+ */
+const BENIGN_LOG_MESSAGES = [
+  /^🌀/,
+  /^\[cyclist\] (start|stop|pause)$/,
+  /^\[eval\] code updated$/,
+  /^\[webaudio\] (preloading|start rendering)$/,
+];
+
+/**
+ * Whether a Strudel log line is something the person at the keyboard needs to see.
+ *
+ * Strudel puts everything on one channel, progress included, so this filters — but see
+ * BENIGN_LOG_MESSAGES for why it filters the way round it does.
+ */
+export function isStrudelProblem(detail: StrudelLogDetail | undefined): boolean {
+  if (!detail?.message) return false;
+  if (detail.type === "error" || detail.type === "warning") return true;
+  return !BENIGN_LOG_MESSAGES.some((benign) => benign.test(detail.message.trim()));
+}
+
+/**
+ * Why audio cannot work on this origin, or null when it can.
+ *
+ * Strudel's audio engine (superdough) builds `new AudioWorkletNode(...)`, and AudioWorklet
+ * is a **secure-context-only** API. Served over plain HTTP from anything that isn't
+ * localhost — a LAN address, a tailnet IP — the global simply does not exist, and the first
+ * attempt to make a sound fails with:
+ *
+ *   ReferenceError: AudioWorkletNode is not defined
+ *
+ * which names a browser internal, mentions neither HTTPS nor the origin, and sends you
+ * looking for a bug in the pattern. The condition is knowable on load, so say so on load.
+ */
+export function insecureContextWarning(): string | null {
+  if (typeof window === "undefined" || window.isSecureContext) return null;
+  return (
+    `no audio on ${window.location.origin} — browsers only expose Web Audio's AudioWorklet ` +
+    "to secure contexts, so playback will fail here however correct the pattern is. Editing, " +
+    "chat and sharing all work; sound needs https, or http://localhost."
+  );
+}

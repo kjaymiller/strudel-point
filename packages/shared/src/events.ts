@@ -62,6 +62,16 @@ export interface CursorEvent extends BaseEvent {
 export interface ChatMessageEvent extends BaseEvent {
   type: "chat:message";
   body: string;
+  /** Who said it. Carried on the event because chat is the one surface that renders names, not colours. */
+  username: string;
+  /**
+   * "bot" marks a reply the gateway generated (userId is BOT_USER_ID, see chat.ts) rather
+   * than something a socket sent. Clients style it differently and — importantly — never
+   * feed a bot turn back as a *user* turn when they build the next request's history.
+   */
+  author: "user" | "bot";
+  /** Tools the bot ran to produce this reply. Only ever set on a bot message. */
+  toolsUsed?: string[];
 }
 
 /**
